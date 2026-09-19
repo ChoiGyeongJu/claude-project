@@ -7,7 +7,7 @@ import { loadConfig } from './config.js'
 import { createDartSource } from './adapters/sources/dart.js'
 import { createPostgresStore, type Db } from './adapters/store/postgres.js'
 import { createTelegramNotifier } from './adapters/notifier/telegram.js'
-import { createLlmSummarizer } from './adapters/summarizer/llm.js'
+import { noopSummarizer } from './adapters/summarizer/noop.js'
 import { createHeartbeat } from './pipeline/health.js'
 import { runLoop, createSleeper } from './pipeline/cycle.js'
 
@@ -21,7 +21,15 @@ async function main(): Promise<void> {
   const store = createPostgresStore(db)
   const source = createDartSource({ apiKey: cfg.dartApiKey })
   const notifier = createTelegramNotifier(cfg.telegram)
-  const summarizer = createLlmSummarizer(cfg.llm)
+  // LLM 요약은 지금 붙여봐야 값이 없다. 공시 본문이 아직 없어 모델에 들어가는
+  // 입력이 공시 제목뿐인데, 그 제목은 같은 메시지 두 줄 위에 이미 그대로 찍혀
+  // 나간다 — 돈과 최대 30초의 직렬 지연을 폴링 루프 위에서 쓰면서 제목을
+  // 바꿔 쓰기만 하는 셈이다. 2.5초 주기를 지연시키는 쪽이 훨씬 비싸다.
+  //
+  // llm.ts 와 그 테스트는 그대로 둔다 — 버린 것이 아니다. Task 18 이 문서 API 로
+  // 공시 본문을 가져오면 그때 createLlmSummarizer(cfg.llm) 로 되돌린다.
+  // LLM_API_KEY 는 그때까지도 필수 설정으로 남는다.
+  const summarizer = noopSummarizer
   const heartbeat = createHeartbeat({ url: cfg.heartbeatUrl })
   const circuit = createCircuit()
 

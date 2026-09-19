@@ -94,6 +94,45 @@ describe('게이트 6 — 키워드 티어링', () => {
   })
 })
 
+/**
+ * 화이트리스트에 취득 계열만 있고 처분·소각 계열이 통째로 빠져 있었다.
+ * 자사주 소각은 유통주식수를 영구히 줄이는, 시장에서 가장 강한 촉매 중 하나인데
+ * no-keyword-match 로 조용히 버려지고 있었다 — 버려진 건은 발송에 나타나지 않으므로
+ * 다이제스트의 미매칭 목록을 보지 않는 한 영원히 보이지 않는다(스펙 §7.4).
+ */
+describe('게이트 6 — 처분·소각 계열', () => {
+  it.each([
+    '자기주식처분결정',
+    '자기주식소각결정',
+    '타법인주식및출자증권처분결정',
+    '자기주식취득신탁계약해지결정',
+  ])('%s 는 critical', (title) => {
+    expect(evaluateDart(ev(title))).toMatchObject({
+      action: 'pass', tier: 'critical', rule: `keyword:${title}`,
+    })
+  })
+
+  it.each([
+    ['자기주식취득결정', '자기주식처분결정'],
+    ['자기주식취득신탁계약체결결정', '자기주식취득신탁계약해지결정'],
+    ['타법인주식및출자증권취득결정', '타법인주식및출자증권처분결정'],
+  ])(
+    '%s 과 %s 를 서로 다른 키워드로 구분한다 — 부분 문자열로 섞이면 안 된다',
+    (acquire, dispose) => {
+      expect(evaluateDart(ev(dispose))).toMatchObject({ rule: `keyword:${dispose}` })
+      expect(evaluateDart(ev(acquire)).action).toBe('pass')
+    },
+  )
+
+  it('해지결정이 취득결정 키워드에 먼저 걸리지 않는다 — 배열 순서 회귀', () => {
+    // '자기주식취득신탁계약해지결정'.includes('자기주식취득결정') 가 false 여야
+    // 배열 앞쪽 항목이 이 제목을 가로채지 않는다.
+    expect('자기주식취득신탁계약해지결정'.includes('자기주식취득결정')).toBe(false)
+    expect(evaluateDart(ev('자기주식취득신탁계약해지결정')))
+      .toMatchObject({ rule: 'keyword:자기주식취득신탁계약해지결정' })
+  })
+})
+
 describe('게이트 7 — 화이트리스트 미매칭', () => {
   it('목록에 없는 공시는 drop하고 사유를 남긴다', () => {
     expect(evaluateDart(ev('주주명부폐쇄기간또는기준일설정')))
