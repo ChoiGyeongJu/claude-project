@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { NormalizedEvent } from '@app/shared'
-import { createLlmSummarizer, SUMMARY_SYSTEM_PROMPT } from './llm.js'
+import { createLlmSummarizer, SUMMARY_SYSTEM_PROMPT, violatesBoundary } from './llm.js'
 import { noopSummarizer } from './noop.js'
 
 const event: NormalizedEvent = {
@@ -27,8 +27,8 @@ describe('SUMMARY_SYSTEM_PROMPT — 규제선', () => {
     }
   )
 
-  it('사실 요약과 수치 추출을 지시한다', () => {
-    expect(SUMMARY_SYSTEM_PROMPT).toContain('사실')
+  it('제목 해석과 수치 포함을 지시한다', () => {
+    expect(SUMMARY_SYSTEM_PROMPT).toContain('제목')
     expect(SUMMARY_SYSTEM_PROMPT).toContain('금액')
   })
 })
@@ -62,6 +62,46 @@ describe('createLlmSummarizer', () => {
       json: async () => ({ foo: 1 }),
     }))
     expect(await s.summarize(event)).toBeNull()
+  })
+
+  it('규제선: 모델이 호재를 포함하면 null을 반환한다', async () => {
+    const s = summarizerWith(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ type: 'text', text: '이것은 호재입니다' }] }),
+    }))
+    expect(await s.summarize(event)).toBeNull()
+  })
+
+  it('규제선: 모델이 투자의견을 포함하면 null을 반환한다', async () => {
+    const s = summarizerWith(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ type: 'text', text: '주가 상승 여력이 있습니다' }] }),
+    }))
+    expect(await s.summarize(event)).toBeNull()
+  })
+
+  it('정상 요약은 통과한다', async () => {
+    const s = summarizerWith(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ type: 'text', text: '타법인의 주식을 취득하기로 결정했다' }] }),
+    }))
+    expect(await s.summarize(event)).toBe('타법인의 주식을 취득하기로 결정했다')
+  })
+})
+
+describe('violatesBoundary — 출력 검증', () => {
+  it.each(['호재', '악재', '목표가', '적정주가', '매수', '매도', '투자의견', '상승 여력', '하락 여력'])(
+    '"%s"를 포함하면 true',
+    (word) => {
+      expect(violatesBoundary(`거래 ${word} 상황`)).toBe(true)
+    }
+  )
+
+  it('규제 금지어가 없으면 false', () => {
+    expect(violatesBoundary('타법인 주식 취득 결정')).toBe(false)
   })
 })
 
