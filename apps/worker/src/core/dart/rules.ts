@@ -1,5 +1,9 @@
 import type { NormalizedEvent, Verdict } from '@app/shared'
-import { NOISE_PATTERNS, PERIODIC_PATTERNS, PREFIX_RULES } from './keywords.js'
+import {
+  CRITICAL_KEYWORDS, HIGH_KEYWORDS,
+  NOISE_PATTERNS, PERIODIC_PATTERNS, PREFIX_RULES,
+} from './keywords.js'
+import type { Tier } from '@app/shared'
 
 const PREFIX_RE = /^\[([^\]]+)\]\s*/
 
@@ -8,6 +12,17 @@ export function splitPrefix(title: string): { prefix: string | null; body: strin
   const m = PREFIX_RE.exec(title)
   if (!m) return { prefix: null, body: title }
   return { prefix: m[1]!, body: title.slice(m[0].length) }
+}
+
+/** 가장 먼저 매칭되는 키워드와 티어를 반환한다. critical이 high보다 우선한다. */
+export function matchKeyword(body: string): { tier: Tier; keyword: string } | null {
+  const critical = CRITICAL_KEYWORDS.find((k) => body.includes(k))
+  if (critical) return { tier: 'critical', keyword: critical }
+
+  const high = HIGH_KEYWORDS.find((k) => body.includes(k))
+  if (high) return { tier: 'high', keyword: high }
+
+  return null
 }
 
 export function evaluateDart(event: NormalizedEvent): Verdict {
@@ -40,6 +55,12 @@ export function evaluateDart(event: NormalizedEvent): Verdict {
     return { action: 'drop', reason: 'noise' }
   }
 
-  // 게이트 6~7은 Task 4에서 이어 붙인다.
+  // 게이트 6 — 키워드 티어링
+  const matched = matchKeyword(body)
+  if (matched) {
+    return { action: 'pass', tier: matched.tier, rule: `keyword:${matched.keyword}` }
+  }
+
+  // 게이트 7 — 화이트리스트 미매칭
   return { action: 'drop', reason: 'no-keyword-match' }
 }

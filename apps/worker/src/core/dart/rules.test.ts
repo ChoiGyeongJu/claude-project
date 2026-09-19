@@ -66,3 +66,44 @@ describe('게이트 5 — 노이즈 제외', () => {
       .toEqual({ action: 'drop', reason: 'noise' })
   })
 })
+
+describe('게이트 6 — 키워드 티어링', () => {
+  it.each([
+    '단일판매·공급계약체결',
+    '무상증자결정',
+    '자기주식취득결정',
+    '최대주주변경',
+    '횡령·배임혐의발생',
+  ])('%s 는 critical', (title) => {
+    const v = evaluateDart(ev(title))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical' })
+  })
+
+  it.each([
+    '매출액또는손익구조30%(대규모법인은15%)이상변동',
+    '타법인주식및출자증권취득결정',
+    '현금·현물배당결정',
+  ])('%s 는 high', (title) => {
+    const v = evaluateDart(ev(title))
+    expect(v).toMatchObject({ action: 'pass', tier: 'high' })
+  })
+
+  it('매칭된 키워드를 rule에 남긴다', () => {
+    const v = evaluateDart(ev('무상증자결정'))
+    expect(v).toMatchObject({ rule: 'keyword:무상증자결정' })
+  })
+})
+
+describe('게이트 7 — 화이트리스트 미매칭', () => {
+  it('목록에 없는 공시는 drop하고 사유를 남긴다', () => {
+    expect(evaluateDart(ev('주주명부폐쇄기간또는기준일설정')))
+      .toEqual({ action: 'drop', reason: 'no-keyword-match' })
+  })
+})
+
+describe('추가: 인식되지 않는 접두어 제거 후 정기보고서 판정', () => {
+  it('[변경]사업보고서 는 unrecognized prefix를 제거하고 periodic-report로 drop', () => {
+    expect(evaluateDart(ev('[변경]사업보고서')))
+      .toEqual({ action: 'drop', reason: 'periodic-report' })
+  })
+})
