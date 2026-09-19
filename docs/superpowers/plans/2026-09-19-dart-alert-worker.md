@@ -2834,7 +2834,8 @@ Expected: FAIL — health 모듈 없음
 
 `apps/worker/src/pipeline/health.ts`:
 ```ts
-export type Heartbeat = { ping(): Promise<void> }
+/** ping() 은 절대 throw 하지 않는다. 반환값은 "모니터링 서비스가 확인했는가". */
+export type Heartbeat = { ping(): Promise<boolean> }
 
 export type HeartbeatConfig = {
   url: string | null
@@ -2848,12 +2849,16 @@ export type HeartbeatConfig = {
 export function createHeartbeat(cfg: HeartbeatConfig): Heartbeat {
   const doFetch = cfg.fetchImpl ?? fetch
   return {
-    async ping(): Promise<void> {
-      if (!cfg.url) return
+    async ping(): Promise<boolean> {
+      if (!cfg.url) return true // 설정하지 않은 경우는 실패가 아니다
       try {
-        await doFetch(cfg.url)
+        const res = await doFetch(cfg.url)
+        // 상태 코드를 반드시 본다. URL 오타나 계정 만료는 4xx/5xx 로 오는데
+        // 이를 성공으로 취급하면 "감시가 깨진 상태"가 영원히 보이지 않는다.
+        return res.ok
       } catch {
         // 감시 서비스 장애가 워커를 멈추게 해서는 안 된다
+        return false
       }
     },
   }
@@ -3249,6 +3254,7 @@ async function main(): Promise<void> {
   const circuit = createCircuit()
 
   let lastDigestDate = kstDateString(new Date())
+  let heartbeatFailures = 0
   log.info('worker started')
 
   for (;;) {
@@ -3271,7 +3277,9 @@ async function main(): Promise<void> {
         lastDigestDate = kstDate
       }
 
-      await heartbeat.ping()
+      // heartbeat 이 확인되지 않으면(URL 오타·계정 만료 포함) 연속 실패를 센다.
+      // 이 값이 0이 아니면 감시망이 뚫린 것이므로 다이제스트에 반드시 드러나야 한다.
+      heartbeatFailures = (await heartbeat.ping()) ? 0 : heartbeatFailures + 1
 
       const base = budgetGuard(used, pollIntervalMs(now))
       await sleep(base)
@@ -3280,8 +3288,14 @@ async function main(): Promise<void> {
       const failures = circuit.consecutiveFailures()
       log.error({ err, failures }, 'cycle failed')
 
-      if (failures === ALERT_THRESHOLD) {
-        await notifier.send(`⚠️ 워커 연속 실패 ${failures}회`).catch(() => {})
+      // `=== ALERT_THRESHOLD` 로 두면 안 된다: 전면 장애(DART·텔레그램 동시 불통) 시
+      // 5회째의 단 한 번뿐인 발송이 조용히 실패하고 failures 는 6,7,8... 로 올라가
+      // 다시 5가 되지 않으므로 장애 전 구간에 알림이 0건 간다.
+      if (failures >= ALERT_THRESHOLD && failures % ALERT_THRESHOLD === 0) {
+        await notifier.send(
+          `⚠️ 워커 연속 실패 ${failures}회` +
+          (heartbeatFailures > 0 ? `\n⚠️ heartbeat 미확인 ${heartbeatFailures}회 — 감시망 점검 필요` : ''),
+        ).catch(() => {})
       }
 
       await sleep(pollIntervalMs(new Date()) * circuit.intervalMultiplier())
