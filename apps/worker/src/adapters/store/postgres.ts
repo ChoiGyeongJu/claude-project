@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, isNotNull, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { NormalizedEvent, Tier } from '@app/shared'
 import type { EventStore, PendingOutbox } from '../../ports/store.js'
@@ -184,7 +184,26 @@ export function createPostgresStore(db: Db): EventStore {
         lt(events.firstSeenAt, dayEnd),
       )).limit(50)
 
-      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed }
+      // outbox.lastError는 자유 텍스트이지만 재시도/dead 경로 모두 같은 문자열(예: 'dart-timeout')을
+      // 남기므로 그룹핑이 유효하다. Top 5만 — 나머지 전부를 나열하면 다이제스트가 읽히지 않아
+      // (읽히지 않는 다이제스트는 없는 것과 같다) 신호가 오히려 묻힌다.
+      const errorRows = await db.select({
+        err: outbox.lastError, n: sql<number>`count(*)::int`,
+      }).from(outbox)
+        .innerJoin(events, eq(outbox.eventId, events.id))
+        .where(and(
+          isNotNull(outbox.lastError),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+        .groupBy(outbox.lastError)
+        .orderBy(desc(sql`count(*)`))
+        .limit(5)
+
+      const errorCounts: Record<string, number> = {}
+      for (const r of errorRows) if (r.err) errorCounts[r.err] = r.n
+
+      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed, errorCounts }
     },
   }
 }

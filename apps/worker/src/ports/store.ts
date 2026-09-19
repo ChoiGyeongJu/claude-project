@@ -38,5 +38,6 @@ export type EventStore = {
     sent: { critical: number; high: number; normal: number }
     dead: number
     missedCandidates: Array<{ title: string; corpName: string | null; ticker: string | null }>
+    errorCounts: Record<string, number>
   }>
 }

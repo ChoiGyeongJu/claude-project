@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { getTableName, SQL, StringChunk } from 'drizzle-orm'
+import { getTableName, is, Param, SQL, StringChunk } from 'drizzle-orm'
 import type { NormalizedEvent } from '@app/shared'
 import { createPostgresStore, type Db } from './postgres.js'
 import { outbox } from './schema.js'
@@ -252,4 +252,96 @@ describe('claimPending', () => {
       expect(sqlText(timeOrder).toLowerCase()).toContain('asc')
     },
   )
+})
+
+/** SQL 조각 트리(중첩 SQL, 예: and()가 eq()/gte()/lt() 여럿을 감싼 것)를 재귀적으로
+ * 순회하며 모든 Param 값을 모은다. `eq(col, 'drop')`의 'drop'은 StringChunk가 아니라
+ * Param으로 표현되므로(파라미터 바인딩), 위의 sqlText()로는 보이지 않는다 — 이 헬퍼가 필요한 이유. */
+function collectParamValues(node: unknown, out: unknown[] = []): unknown[] {
+  if (is(node, Param)) {
+    out.push(node.value)
+    return out
+  }
+  if (node instanceof SQL) {
+    for (const chunk of node.queryChunks) collectParamValues(chunk, out)
+  }
+  return out
+}
+
+type DigestChain = {
+  from: () => DigestChain
+  innerJoin: () => DigestChain
+  where: (cond: unknown) => DigestChain
+  groupBy: () => DigestChain
+  orderBy: () => DigestChain
+  limit: () => DigestChain
+  then: (resolve: (v: unknown) => void) => void
+}
+
+/**
+ * digestFor()가 순서대로 날리는 4개 select 쿼리(sent, dead, missed, errors)를 흉내내는 fake.
+ * 체인 길이가 쿼리마다 달라(groupBy/orderBy/limit 유무) 모든 메서드를 no-op으로 체이닝하고,
+ * where()에 전달된 조건만 호출 순서대로 기록한다. 4개 쿼리는 Promise.all 없이 순차적으로
+ * await되므로 — 실제 구현이 그렇게 짜여 있다 — 공유 카운터만으로 몇 번째 select()인지
+ * 안전하게 구분할 수 있다.
+ */
+function fakeDigestDb(rowsByCall: unknown[][]) {
+  const whereCalls: unknown[] = []
+  let call = -1
+  const chain: DigestChain = {
+    from: () => chain,
+    innerJoin: () => chain,
+    where: (cond) => {
+      whereCalls[call] = cond
+      return chain
+    },
+    groupBy: () => chain,
+    orderBy: () => chain,
+    limit: () => chain,
+    then: (resolve) => resolve(rowsByCall[call] ?? []),
+  }
+  const db = {
+    select: () => {
+      call += 1
+      return chain
+    },
+  }
+  return { db: db as unknown as Db, whereCalls }
+}
+
+describe('digestFor', () => {
+  it(
+    '미매칭 후보 조회는 verdict=drop AND rule=no-keyword-match 두 조건을 모두 건다 — ' +
+      '하나라도 빠지면 전체 drop이 쏟아져 다이제스트가 읽히지 않거나(노이즈), ' +
+      '아예 걸러져 신호가 사라진다(과다 제한). 순서: 0=sent, 1=dead, 2=missed, 3=errors.',
+    async () => {
+      const { db, whereCalls } = fakeDigestDb([[], [], [], []])
+      const store = createPostgresStore(db)
+
+      await store.digestFor('2026-09-19')
+
+      const missedWhere = whereCalls[2]
+      const values = collectParamValues(missedWhere)
+      expect(values).toContain('drop')
+      expect(values).toContain('no-keyword-match')
+    },
+  )
+
+  it('outbox.lastError를 집계해 errorCounts로 반환한다 — null인 lastError는 제외한다', async () => {
+    const { db } = fakeDigestDb([
+      [], // sent
+      [], // dead
+      [], // missed
+      [
+        { err: 'dart-timeout', n: 3 },
+        { err: 'telegram-429', n: 1 },
+        { err: null, n: 7 }, // 실제로는 isNotNull()이 SQL 단에서 걸러내는 행 — 매핑 가드가 통과시키지 않는지 확인
+      ],
+    ])
+    const store = createPostgresStore(db)
+
+    const result = await store.digestFor('2026-09-19')
+
+    expect(result.errorCounts).toEqual({ 'dart-timeout': 3, 'telegram-429': 1 })
+  })
 })

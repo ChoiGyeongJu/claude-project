@@ -18,6 +18,6 @@ export async function runDigest(deps: DigestDeps, kstDate: string): Promise<void
     dead: agg.dead,
     apiCalls,
     missedCandidates: agg.missedCandidates,
-    errorCounts: {},
+    errorCounts: agg.errorCounts,
   }))
 }
