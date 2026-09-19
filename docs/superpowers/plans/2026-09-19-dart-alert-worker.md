@@ -2973,6 +2973,8 @@ export type DigestData = {
   apiCalls: number
   missedCandidates: MissedCandidate[]
   errorCounts: Record<string, number>
+  /** 잘리지 않은 총계. missedCandidates.length 를 실제 건수로 쓰면 심각도를 과소 표시한다. */
+  missedTotal: number
 }
 
 export function formatDigest(d: DigestData): string {
@@ -2994,7 +2996,9 @@ export function formatDigest(d: DigestData): string {
     `API    ${d.apiCalls} / ${DAILY_LIMIT}`,
     `에러   ${errors}`,
     '',
-    `미매칭 ${d.missedCandidates.length}건 \\(룰 튜닝 후보\\)`,
+    d.missedTotal > d.missedCandidates.length
+      ? `미매칭 ${d.missedTotal}건 \\(상위 ${d.missedCandidates.length}건 표시 · 룰 튜닝 후보\\)`
+      : `미매칭 ${d.missedTotal}건 \\(룰 튜닝 후보\\)`,
     missed,
   ].join('\n')
 }
@@ -3011,6 +3015,8 @@ export function formatDigest(d: DigestData): string {
     missedCandidates: Array<{ title: string; corpName: string | null; ticker: string | null }>
     /** outbox.lastError 집계. 측정하지 않으면서 "에러 없음"을 표시하면 거짓 안심이 된다. */
     errorCounts: Record<string, number>
+    /** 잘리지 않은 미매칭 총계. missedCandidates 는 상위 N건만 담으므로 이 값과 다를 수 있다. */
+    missedTotal: number
   }>
 ```
 
@@ -3075,7 +3081,23 @@ export function formatDigest(d: DigestData): string {
       const errorCounts: Record<string, number> = {}
       for (const r of errorRows) if (r.err) errorCounts[r.err] = r.n
 
-      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed, errorCounts }
+      // 잘리지 않은 총계를 따로 센다 — 50건 상한에 걸린 날 "50건"으로 보이면
+      // 심각도가 과소 표시되고, 운영자는 문제가 작다고 오판한다.
+      const missedTotalRows = await db.select({ n: sql<number>`count(*)::int` })
+        .from(events).where(and(
+          eq(events.verdict, 'drop'),
+          eq(events.rule, 'no-keyword-match'),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+
+      return {
+        sent,
+        dead: deadRows[0]?.n ?? 0,
+        missedCandidates: missed,
+        errorCounts,
+        missedTotal: missedTotalRows[0]?.n ?? 0,
+      }
     },
 ```
 
@@ -3109,6 +3131,7 @@ export async function runDigest(deps: DigestDeps, kstDate: string): Promise<void
     apiCalls,
     missedCandidates: agg.missedCandidates,
     errorCounts: agg.errorCounts,
+    missedTotal: agg.missedTotal,
   }))
 }
 ```
