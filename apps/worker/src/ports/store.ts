@@ -32,4 +32,11 @@ export type EventStore = {
 
   incrementApiUsage(sourceId: string, kstDate: string): Promise<number>
   getApiUsage(sourceId: string, kstDate: string): Promise<number>
+
+  /** 일일 다이제스트용 집계. kstDate는 YYYY-MM-DD. */
+  digestFor(kstDate: string): Promise<{
+    sent: { critical: number; high: number; normal: number }
+    dead: number
+    missedCandidates: Array<{ title: string; corpName: string | null; ticker: string | null }>
+  }>
 }

@@ -1,4 +1,4 @@
-import { and, asc, eq, lte, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { NormalizedEvent, Tier } from '@app/shared'
 import type { EventStore, PendingOutbox } from '../../ports/store.js'
@@ -145,6 +145,46 @@ export function createPostgresStore(db: Db): EventStore {
         .from(apiUsage)
         .where(and(eq(apiUsage.usageDate, kstDate), eq(apiUsage.sourceId, sourceId)))
       return rows[0]?.c ?? 0
+    },
+
+    async digestFor(kstDate) {
+      const dayStart = new Date(`${kstDate}T00:00:00+09:00`)
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000)
+
+      const sentRows = await db.select({ tier: outbox.tier, n: sql<number>`count(*)::int` })
+        .from(outbox)
+        .innerJoin(events, eq(outbox.eventId, events.id))
+        .where(and(
+          eq(outbox.status, 'sent'),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+        .groupBy(outbox.tier)
+
+      const sent = { critical: 0, high: 0, normal: 0 }
+      for (const r of sentRows) {
+        if (r.tier === 'critical' || r.tier === 'high' || r.tier === 'normal') sent[r.tier] = r.n
+      }
+
+      const deadRows = await db.select({ n: sql<number>`count(*)::int` })
+        .from(outbox)
+        .innerJoin(events, eq(outbox.eventId, events.id))
+        .where(and(
+          eq(outbox.status, 'dead'),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+
+      const missed = await db.select({
+        title: events.title, corpName: events.corpName, ticker: events.ticker,
+      }).from(events).where(and(
+        eq(events.verdict, 'drop'),
+        eq(events.rule, 'no-keyword-match'),
+        gte(events.firstSeenAt, dayStart),
+        lt(events.firstSeenAt, dayEnd),
+      )).limit(50)
+
+      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed }
     },
   }
 }
