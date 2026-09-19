@@ -11,18 +11,44 @@ describe('createHeartbeat — VM이 통째로 죽는 경우를 잡는 유일한 
       .toBe('https://hc.test/abc')
   })
 
-  it('URL이 없으면 아무것도 하지 않는다 — 로컬 개발에서 방해되면 안 된다', async () => {
+  it('200 응답은 true를 반환한다', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 })) as unknown as typeof fetch
+    const hb = createHeartbeat({ url: 'https://hc.test/abc', fetchImpl })
+
+    const result = await hb.ping()
+    expect(result).toBe(true)
+  })
+
+  it('4xx 응답은 false를 반환하고 워커를 죽이지 않는다', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: false, status: 404 })) as unknown as typeof fetch
+    const hb = createHeartbeat({ url: 'https://hc.test/abc', fetchImpl })
+
+    const result = await hb.ping()
+    expect(result).toBe(false)
+  })
+
+  it('5xx 응답은 false를 반환하고 워커를 죽이지 않는다', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: false, status: 500 })) as unknown as typeof fetch
+    const hb = createHeartbeat({ url: 'https://hc.test/abc', fetchImpl })
+
+    const result = await hb.ping()
+    expect(result).toBe(false)
+  })
+
+  it('URL이 없으면 true를 반환하고 아무것도 하지 않는다 — 로컬 개발에서 방해되면 안 된다', async () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch
     const hb = createHeartbeat({ url: null, fetchImpl })
 
-    await hb.ping()
+    const result = await hb.ping()
+    expect(result).toBe(true)
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it('핑 실패가 워커를 죽이지 않는다', async () => {
+  it('네트워크 실패는 false를 반환하고 워커를 죽이지 않는다', async () => {
     const fetchImpl = vi.fn(async () => { throw new Error('down') }) as unknown as typeof fetch
     const hb = createHeartbeat({ url: 'https://hc.test/abc', fetchImpl })
 
-    await expect(hb.ping()).resolves.toBeUndefined()
+    const result = await hb.ping()
+    expect(result).toBe(false)
   })
 })
