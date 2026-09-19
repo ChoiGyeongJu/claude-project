@@ -22,6 +22,10 @@ describe('escapeMarkdownV2', () => {
   it('회사명의 밑줄을 깨뜨리지 않는다', () => {
     expect(escapeMarkdownV2('샘플_전자')).toBe('샘플\\_전자')
   })
+
+  it('백슬래시 자신도 이스케이프된다', () => {
+    expect(escapeMarkdownV2('\\')).toBe('\\\\')
+  })
 })
 
 describe('formatEvent', () => {
@@ -57,7 +61,7 @@ describe('formatMerged', () => {
 })
 
 describe('escape invariant — 예약문자 누락 감지', () => {
-  it('예약문자를 포함한 모든 입력을 올바르게 이스케이프한다', () => {
+  it('예약문자를 포함한 모든 입력을 올바르게 이스케이프한다 (formatEvent)', () => {
     const msg = formatEvent(e, 'critical')
 
     // Company name and ticker must appear escaped (company name has _)
@@ -75,5 +79,31 @@ describe('escape invariant — 예약문자 누락 감지', () => {
     expect(msg).not.toContain('dart.fss.or.kr')
     expect(msg).not.toContain('rcpNo=')
     expect(msg).not.toContain('main.do')
+  })
+
+  it('병합 메시지에서 모든 URL을 이스케이프한다 (formatMerged)', () => {
+    const e2: NormalizedEvent = {
+      ...e,
+      externalId: '20260919000456',
+      url: 'https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260919000456',
+      title: '무상증자결정',
+    }
+
+    const msg = formatMerged([
+      { event: e, tier: 'high' },
+      { event: e2, tier: 'critical' },
+    ])
+
+    // Both URLs must appear escaped
+    const escapedUrl1 = escapeMarkdownV2(e.url)
+    const escapedUrl2 = escapeMarkdownV2(e2.url)
+    expect(msg).toContain(escapedUrl1)
+    expect(msg).toContain(escapedUrl2)
+
+    // Critical: verify unescaped reserved characters don't appear from either event
+    // If someone removes escapeMarkdownV2(event.url) in formatMerged, these leak through
+    expect(msg).not.toContain('rcpNo=20260919000123')
+    expect(msg).not.toContain('rcpNo=20260919000456')
+    expect(msg).not.toContain('main.do?')
   })
 })
