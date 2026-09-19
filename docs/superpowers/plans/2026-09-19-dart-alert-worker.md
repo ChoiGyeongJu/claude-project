@@ -3009,6 +3009,8 @@ export function formatDigest(d: DigestData): string {
     sent: { critical: number; high: number; normal: number }
     dead: number
     missedCandidates: Array<{ title: string; corpName: string | null; ticker: string | null }>
+    /** outbox.lastError 집계. 측정하지 않으면서 "에러 없음"을 표시하면 거짓 안심이 된다. */
+    errorCounts: Record<string, number>
   }>
 ```
 
@@ -3055,13 +3057,31 @@ export function formatDigest(d: DigestData): string {
         lt(events.firstSeenAt, dayEnd),
       )).limit(50)
 
-      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed }
+      // 에러 집계. 측정하지 않으면서 "없음"을 표시하는 것이 가장 나쁜 실패다.
+      // 상위 5종만 노출한다 — 전부 나열하면 다이제스트가 읽히지 않는다.
+      const errorRows = await db.select({
+        err: outbox.lastError, n: sql<number>`count(*)::int`,
+      }).from(outbox)
+        .innerJoin(events, eq(outbox.eventId, events.id))
+        .where(and(
+          isNotNull(outbox.lastError),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+        .groupBy(outbox.lastError)
+        .orderBy(desc(sql`count(*)`))
+        .limit(5)
+
+      const errorCounts: Record<string, number> = {}
+      for (const r of errorRows) if (r.err) errorCounts[r.err] = r.n
+
+      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed, errorCounts }
     },
 ```
 
 import 문에 `gte`, `lt` 추가:
 ```ts
-import { and, asc, eq, gte, lt, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, isNotNull, lt, lte, sql } from 'drizzle-orm'
 ```
 
 - [ ] **Step 6: 다이제스트 파이프라인 작성**
@@ -3088,7 +3108,7 @@ export async function runDigest(deps: DigestDeps, kstDate: string): Promise<void
     dead: agg.dead,
     apiCalls,
     missedCandidates: agg.missedCandidates,
-    errorCounts: {},
+    errorCounts: agg.errorCounts,
   }))
 }
 ```
