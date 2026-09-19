@@ -1470,9 +1470,12 @@ export function createPostgresStore(db: Db): EventStore {
     },
 
     async claimPending(now, limit) {
+      // critical 우선. nextAttemptAt 만으로 정렬하면 CLAIM_LIMIT 경계에서
+      // critical 이 밀려 TTL(5분)을 넘길 수 있다 — 가장 중요한 알림이 먼저 버려진다.
       const rows = await db.select().from(outbox)
         .where(and(eq(outbox.status, 'pending'), lte(outbox.nextAttemptAt, now)))
-        .orderBy(asc(outbox.nextAttemptAt))
+        .orderBy(sql`CASE WHEN ${outbox.tier} = 'critical' THEN 0 ELSE 1 END`,
+                 asc(outbox.nextAttemptAt))
         .limit(limit)
 
       return rows.map((r): PendingOutbox => ({
