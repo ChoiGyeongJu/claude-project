@@ -1619,6 +1619,13 @@ export function kstDateString(now: Date): string {
   return new Date(now.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10)
 }
 
+/** 'YYYY-MM-DD' 의 다음 날. 밀린 다이제스트를 하루씩 따라잡는 데 쓴다. */
+export function nextKstDate(kstDate: string): string {
+  const d = new Date(`${kstDate}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
 /**
  * 남은 예산에 따라 폴링 주기를 늘린다.
  * 한도 초과로 020 에러를 맞아 서비스가 통째로 멈추는 것이 최악의 실패이므로 보수적으로 잡는다.
@@ -1716,6 +1723,13 @@ import { parseDartResponse } from '../../core/dart/schema.js'
 
 const ENDPOINT = 'https://opendart.fss.or.kr/api/list.json'
 
+/**
+ * Node 의 fetch 에는 기본 타임아웃이 없다. 이 값을 주지 않으면 연결이 매달릴 때
+ * 루프 전체가 무한정 멈추고, heartbeat 이 영영 안 뛰어 외부 감시가 "VM 사망"으로
+ * 오판한다 — 워커는 살아 있는데 고칠 수 없는 상태가 된다.
+ */
+const REQUEST_TIMEOUT_MS = 10_000
+
 export class DartApiError extends Error {
   // 파라미터 프로퍼티(`constructor(readonly status: ...)`)를 쓰면 안 된다.
   // Node 의 strip-only 타입 스트리핑이 지원하지 않아 `node src/main.ts` 가
@@ -1747,7 +1761,9 @@ export function createDartSource(cfg: DartSourceConfig): EventSource {
       url.searchParams.set('sort', 'date')
       url.searchParams.set('sort_mth', 'desc')
 
-      const res = await doFetch(url.toString())
+      const res = await doFetch(url.toString(), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
       if (!res.ok) throw new Error(`DART HTTP ${res.status}`)
 
       const parsed = parseDartResponse(await res.json())
@@ -1966,6 +1982,9 @@ const BUCKET_CAPACITY = 5
 /** 15건/분 = 4초당 토큰 1개. 토큰이 없으면 이만큼 뒤에 재시도한다. */
 const REFILL_WAIT_MS = 4_000
 
+/** fetch 는 기본 타임아웃이 없다. 없으면 발송이 매달려 루프 전체가 멈춘다. */
+const REQUEST_TIMEOUT_MS = 15_000
+
 type TelegramResponse = {
   ok: boolean
   description?: string
@@ -1992,6 +2011,7 @@ export function createTelegramNotifier(cfg: TelegramConfig): Notifier {
       const res = await doFetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
           chat_id: cfg.chatId,
           text: markdownV2,
@@ -2331,6 +2351,9 @@ export type LlmConfig = {
 
 type LlmResponse = { content?: Array<{ type: string; text?: string }> }
 
+/** 생성은 오래 걸릴 수 있으나 무한히는 아니다. 매달리면 알림 전체가 멈춘다. */
+const REQUEST_TIMEOUT_MS = 30_000
+
 export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
   const doFetch = cfg.fetchImpl ?? fetch
 
@@ -2344,6 +2367,7 @@ export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
             'x-api-key': cfg.apiKey,
             'anthropic-version': '2023-06-01',
           },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           body: JSON.stringify({
             model: cfg.model,
             max_tokens: 300,
@@ -2835,6 +2859,9 @@ Expected: FAIL — health 모듈 없음
 `apps/worker/src/pipeline/health.ts`:
 ```ts
 /** ping() 은 절대 throw 하지 않는다. 반환값은 "모니터링 서비스가 확인했는가". */
+/** heartbeat 은 finally 에서 돌므로 가장 짧아야 한다. 여기가 매달리면 루프가 멈춘다. */
+const PING_TIMEOUT_MS = 5_000
+
 export type Heartbeat = { ping(): Promise<boolean> }
 
 export type HeartbeatConfig = {
@@ -2852,7 +2879,7 @@ export function createHeartbeat(cfg: HeartbeatConfig): Heartbeat {
     async ping(): Promise<boolean> {
       if (!cfg.url) return true // 설정하지 않은 경우는 실패가 아니다
       try {
-        const res = await doFetch(cfg.url)
+        const res = await doFetch(cfg.url, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) })
         // 상태 코드를 반드시 본다. URL 오타나 계정 만료는 4xx/5xx 로 오는데
         // 이를 성공으로 취급하면 "감시가 깨진 상태"가 영원히 보이지 않는다.
         return res.ok
@@ -3267,7 +3294,7 @@ pnpm --filter @app/worker add pino
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import pino from 'pino'
-import { budgetGuard, kstDateString } from './core/budget.js'
+import { budgetGuard, kstDateString, nextKstDate } from './core/budget.js'
 import { ALERT_THRESHOLD, createCircuit } from './core/circuit.js'
 import { pollIntervalMs } from './core/schedule.js'
 import { loadConfig } from './config.js'
@@ -3298,9 +3325,20 @@ async function main(): Promise<void> {
 
   let lastDigestDate = kstDateString(new Date())
   let heartbeatFailures = 0
+  let shuttingDown = false
+
+  // Docker stop·호스트 재부팅은 SIGTERM 으로 온다. 핸들러가 없으면 발송 직후
+  // markSent 직전에 죽어 재시작 시 중복 알림이 나간다 — 매 재배포마다 발생한다.
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(sig, () => {
+      if (shuttingDown) process.exit(1) // 두 번째 신호는 즉시 종료
+      shuttingDown = true
+      log.info({ sig }, 'shutdown requested — finishing current cycle')
+    })
+  }
   log.info('worker started')
 
-  for (;;) {
+  while (!shuttingDown) {
     const now = new Date()
     const kstDate = kstDateString(now)
 
@@ -3314,10 +3352,12 @@ async function main(): Promise<void> {
         log.info({ ingest, dispatch, used }, 'cycle')
       }
 
-      // 자정이 지나면 전날 다이제스트를 보낸다
-      if (kstDate !== lastDigestDate) {
+      // 자정이 지나면 밀린 날짜를 하루씩 모두 보낸다. `= kstDate` 로 건너뛰면
+      // 장애가 자정을 두 번 넘겼을 때 중간 날의 다이제스트가 영영 사라진다 —
+      // 다이제스트는 운영자의 유일한 사후 감사 기록이므로 누락되면 안 된다.
+      while (lastDigestDate !== kstDate) {
         await runDigest({ store, notifier, sourceId: source.id }, lastDigestDate)
-        lastDigestDate = kstDate
+        lastDigestDate = nextKstDate(lastDigestDate)
       }
 
       const base = budgetGuard(used, pollIntervalMs(now))
@@ -3348,6 +3388,9 @@ async function main(): Promise<void> {
       heartbeatFailures = (await heartbeat.ping()) ? 0 : heartbeatFailures + 1
     }
   }
+
+  log.info('shutdown complete')
+  process.exit(0)
 }
 
 // crash-only: 예외를 삼키고 도는 것보다 죽고 재시작하는 편이 안전하다
