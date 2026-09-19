@@ -6,7 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dev": "node src/main.ts"
+    "dev": "tsc -p tsconfig.json && node dist/main.js"
   },
   "dependencies": {
     "@app/shared": "workspace:*",
