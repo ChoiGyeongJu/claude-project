@@ -3401,7 +3401,7 @@ git commit -m "feat: 설정 로더와 메인 루프 조립"
 
 `apps/worker/Dockerfile` (레포 루트를 빌드 컨텍스트로 사용):
 ```dockerfile
-FROM node:22-slim AS build
+FROM node:24-slim AS build
 WORKDIR /app
 RUN corepack enable
 COPY pnpm-workspace.yaml package.json tsconfig.base.json ./
@@ -3412,7 +3412,7 @@ COPY packages/shared packages/shared
 COPY apps/worker apps/worker
 RUN pnpm --filter @app/worker exec tsc -p tsconfig.json
 
-FROM node:22-slim
+FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
