@@ -81,14 +81,18 @@ export function createPostgresStore(db: Db): EventStore {
       })
     },
 
-    async maxExternalId(sourceId) {
-      // UNIQUE (source_id, external_id) 인덱스를 역방향으로 한 번 타고 끝난다 —
-      // 기동 시 1회만 호출되므로 비용은 사실상 없다.
+    async recentExternalIds(sourceId, limit) {
+      // id(bigserial) 내림차순 = 워커가 가장 최근에 기록한 순서. external_id 순으로
+      // 잡으면 안 된다 — 접수 순서와 공개 순서가 달라 뒤늦게 공개된 공시가 최근에
+      // 기록됐는데도 번호가 낮아 빠진다. 기동 시 1회만 호출된다.
       const rows = await db
-        .select({ max: sql<string | null>`max(${events.externalId})` })
+        .select({ externalId: events.externalId })
         .from(events)
         .where(eq(events.sourceId, sourceId))
-      return rows[0]?.max ?? null
+        .orderBy(desc(events.id))
+        .limit(limit)
+      // seen-set 은 삽입 순서를 나이로 쓰므로 오래된 것부터 넣어야 한다.
+      return rows.map((r) => r.externalId).reverse()
     },
 
     async lastEventKstDate() {

@@ -21,13 +21,17 @@ export type EventStore = {
   ): Promise<boolean>
 
   /**
-   * 이 소스에서 기록된 가장 큰 externalId. 행이 없으면 null.
+   * 이 소스에서 가장 최근 기록된 externalId 를 최대 `limit` 개,
+   * **오래된 것부터** 정렬해 반환한다. 행이 없으면 빈 배열.
    *
-   * 재기동 시 하이워터 마크를 이 값으로 심는다. 심지 않으면 매 사이클 목록 API가
+   * 재기동 시 seen-set 을 이 값으로 심는다. 심지 않으면 매 사이클 목록 API가
    * 돌려주는 최신 100건 전부가 recordEvent 로 가고(건당 트랜잭션 1개), 2.5초 주기가
    * DB 왕복에 묶여 설정한 주기대로 돌지 못한다.
+   *
+   * 정렬 방향이 중요하다 — seen-set 은 삽입 순서를 나이로 쓰고 가장 오래된 것부터
+   * 축출하므로, 최신순으로 넣으면 가장 최근 id 가 먼저 버려진다.
    */
-  maxExternalId(sourceId: string): Promise<string | null>
+  recentExternalIds(sourceId: string, limit: number): Promise<string[]>
 
   /**
    * 가장 최근 events.first_seen_at 의 KST 날짜(YYYY-MM-DD). 행이 없으면 null.

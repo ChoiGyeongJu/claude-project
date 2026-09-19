@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { kstDateString } from '../core/budget.js'
 import { createCircuit, ALERT_THRESHOLD } from '../core/circuit.js'
+import { createSeenSet } from '../core/seen.js'
 import type { EventSource } from '../ports/source.js'
 import type { EventStore } from '../ports/store.js'
 import type { Notifier } from '../ports/notifier.js'
@@ -20,7 +21,7 @@ function warmState(heartbeatFailures = 0): CycleState {
   return {
     lastDigestDate: TODAY,
     heartbeatFailures,
-    highWaterMark: '20260919000100',
+    seen: createSeenSet(['20260919000100']),
     coldStart: false,
   }
 }

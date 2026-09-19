@@ -3,6 +3,7 @@ import postgres from 'postgres'
 import pino from 'pino'
 import { kstDateString } from './core/budget.js'
 import { createCircuit } from './core/circuit.js'
+import { createSeenSet, SEEN_CAPACITY } from './core/seen.js'
 import { loadConfig } from './config.js'
 import { createDartSource } from './adapters/sources/dart.js'
 import { createPostgresStore, type Db } from './adapters/store/postgres.js'
@@ -54,10 +55,10 @@ async function main(): Promise<void> {
       sleeper.wakeNow()
     })
   }
-  // 하이워터 마크를 DB에서 심는다. 이게 없으면 첫 사이클이 최신 100건을 전부
+  // 이미 본 공시 집합을 DB에서 심는다. 이게 없으면 첫 사이클이 최신 100건을 전부
   // recordEvent 로 보내고, 그 뒤로도 매 사이클 같은 100건이 no-op 트랜잭션으로
   // 반복된다 — 2.5초 주기가 DB 왕복 속도에 묶인다.
-  const highWaterMark = await store.maxExternalId(source.id)
+  const seen = createSeenSet(await store.recentExternalIds(source.id, SEEN_CAPACITY))
 
   // lastDigestDate 를 메모리에서만 초기화하면 KST 자정을 넘긴 재기동이 그 값을
   // 오늘로 되돌려 전날 다이제스트가 영영 발송되지 않는다 — 따라잡기 루프가
@@ -65,7 +66,7 @@ async function main(): Promise<void> {
   const lastDigestDate = (await store.lastEventKstDate()) ?? kstDateString(new Date())
 
   log.info(
-    { highWaterMark, lastDigestDate, operatorChannel: cfg.operatorChatId !== null },
+    { seen: seen.size, lastDigestDate, operatorChannel: cfg.operatorChatId !== null },
     'worker started',
   )
 
@@ -74,9 +75,9 @@ async function main(): Promise<void> {
     {
       lastDigestDate,
       heartbeatFailures: 0,
-      highWaterMark,
+      seen,
       // 첫 사이클은 기록만 하고 한 건도 발송하지 않는다. 워커는 자신이 얼마나
-      // 오래 죽어 있었는지 알 수 없으므로, 마크 위에 쌓인 물량이 신규 1건인지
+      // 오래 죽어 있었는지 알 수 없으므로, 처음 보는 물량이 신규 1건인지
       // 사흘치 밀린 것인지 구분할 방법이 없다 (스펙 §6.4).
       coldStart: true,
     },

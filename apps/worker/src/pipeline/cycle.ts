@@ -56,7 +56,7 @@ export async function runCycle(
   let heartbeatFailures = state.heartbeatFailures
   // 실패 시에는 진입 상태 그대로 돌려준다 — 특히 coldStart 가 true 로 남아야
   // 기동 직후 DART 가 불통이었던 경우에도 첫 성공 사이클이 억제 사이클이 된다.
-  let ingestState: IngestState = { highWaterMark: state.highWaterMark, coldStart: state.coldStart }
+  let ingestState: IngestState = { seen: state.seen, coldStart: state.coldStart }
   let sleepMs: number
 
   try {
@@ -79,7 +79,7 @@ export async function runCycle(
           fetched: ingest.stats.fetched,
           suppressed: ingest.stats.suppressed,
           recorded: ingest.stats.recorded,
-          highWaterMark: ingest.state.highWaterMark,
+          seen: ingest.state.seen.size,
         },
         'cold start — backlog recorded, nothing enqueued',
       )
@@ -129,7 +129,7 @@ export async function runCycle(
     sleepMs,
     lastDigestDate,
     heartbeatFailures,
-    highWaterMark: ingestState.highWaterMark,
+    seen: ingestState.seen,
     coldStart: ingestState.coldStart,
   }
 }

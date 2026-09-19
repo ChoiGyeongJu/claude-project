@@ -1,40 +1,39 @@
 import type { Verdict } from '@app/shared'
 import { evaluateDart } from '../core/dart/rules.js'
 import { expiresAt } from '../core/policy.js'
+import type { SeenSet } from '../core/seen.js'
 import type { EventSource } from '../ports/source.js'
 import type { EventStore } from '../ports/store.js'
 
 export type IngestDeps = { source: EventSource; store: EventStore }
 
 /**
- * 사이클을 넘어 살아남는 수집 상태. 이 두 값이 스펙 §6.4 의 "재기동 폭탄 방지"를
- * 실제로 구현한다.
+ * 사이클을 넘어 살아남는 수집 상태. 이 두 값이 스펙 §6.4 의 "재기동 폭탄 방지"와
+ * 재조회 억제를 함께 구현한다.
  *
- * `highWaterMark` — 지금까지 처리한 가장 큰 externalId. DART `rcept_no` 는
- *   `YYYYMMDD` + 6자리 일련번호로 된 **고정 길이 14자리**라 사전순 비교가 수치
- *   비교와 일치한다. 이 마크 이하는 DB를 아예 건드리지 않고 건너뛴다.
+ * `seen` — 이미 처리한 externalId 의 경계 있는 집합(core/seen.ts). 집합 안에 있으면
+ *   DB 를 아예 건드리지 않고 건너뛴다.
  *
  *   이것이 없으면 `fetchLatest` 가 매 사이클 같은 최신 100건을 돌려주는데 그 100건
  *   전부가 `recordEvent` 로 가고, 건당 트랜잭션 1개라 2.5초 주기에서 초당 약 40
  *   트랜잭션이 원격 Postgres 로 날아간다 — 그중 99%는 유니크 충돌로 아무것도 하지
  *   않는 no-op 이다. 폴링 주기는 설정값이 아니라 DB가 허락하는 속도가 되어버린다.
  *
- *   다만 마크 이하를 건너뛴다는 것은, DART 가 접수번호 역순으로 공시를 노출하는
- *   경우(더 작은 rcept_no 가 더 큰 것보다 늦게 목록에 뜨는 경우) 그 건을 영영
- *   놓친다는 뜻이기도 하다. 실제로 그런 역전이 일어나는지는 관측된 바 없고
- *   (스펙 §14 미확인 항목), 일어난다면 마크에 작은 수치 여유(margin)를 두는 것이
- *   봉쇄책이다. 비공개 채널 단계에서 실측할 대상이다.
+ *   집합이라 **도착 순서를 전혀 가정하지 않는다.** 하이워터 마크(최대 id)였다면
+ *   접수는 먼저 했지만 심사 때문에 늦게 공개된 공시가 영영 건너뛰어졌다 —
+ *   기록조차 남지 않아 그런 공시가 있었다는 사실 자체를 알 수 없었다. 근거는
+ *   core/seen.ts 주석 참고.
  *
  * `coldStart` — 아직 한 번도 수집에 성공하지 않았는가. 첫 성공 사이클에서만 참이다.
  */
 export type IngestState = {
-  highWaterMark: string | null
+  seen: SeenSet
   coldStart: boolean
 }
 
 export type IngestStats = {
   fetched: number
-  /** highWaterMark 이하라 DB를 건드리지 않고 건너뛴 건수. 정상 상태에선 대부분이 여기 잡힌다. */
+  /** 이미 본 id 라 DB를 건드리지 않고 건너뛴 건수. 정상 상태에선 대부분이 여기 잡힌다. */
   skipped: number
   recorded: number
   enqueued: number
@@ -53,18 +52,8 @@ export async function runIngest(
     fetched: events.length, skipped: 0, recorded: 0, enqueued: 0, suppressed: 0, duplicated: 0,
   }
 
-  // 비교 기준은 **사이클 진입 시점의 마크**로 고정한다. 루프 안에서 전진시킨 값과
-  // 비교하면, 목록이 최신순(내림차순)이라 첫 건이 마크를 최고치로 올려버리고 나머지
-  // 전부가 그 아래로 깔려 건너뛰어진다 — 한 사이클에 1건만 처리하게 된다.
-  const entering = state.highWaterMark
-  let highWaterMark = entering
-
   for (const event of events) {
-    if (highWaterMark === null || event.externalId > highWaterMark) {
-      highWaterMark = event.externalId
-    }
-
-    if (entering !== null && event.externalId <= entering) {
+    if (state.seen.has(event.externalId)) {
       stats.skipped += 1
       continue
     }
@@ -72,10 +61,10 @@ export async function runIngest(
     const verdict: Verdict = evaluateDart(event)
 
     // 게이트 8 — 콜드 스타트 억제. 재기동 직후 워커는 **자신이 얼마나 오래 죽어
-    // 있었는지 알 수 없다.** 마크 위에 쌓인 것이 방금 들어온 1건인지 사흘치 밀린
+    // 있었는지 알 수 없다.** 처음 보는 것이 방금 들어온 1건인지 사흘치 밀린
     // 물량인지 구분할 방법이 없으므로, 첫 사이클은 전부 기록만 하고 한 건도
-    // 발송하지 않는다. 두 번째 사이클부터 마크 위에 올라오는 것은 워커가 살아서
-    // 지켜보는 동안 새로 접수된 것이 확실하므로 정상 발송한다.
+    // 발송하지 않는다. 두 번째 사이클부터 처음 보는 것은 워커가 살아서 지켜보는
+    // 동안 새로 공개된 것이 확실하므로 정상 발송한다.
     //
     // verdict 자체는 건드리지 않는다. events.verdict/rule 은 필터가 내린 판정을
     // 담는 칼럼이고 골든셋·룰 튜닝(스펙 §7.4)이 그 값을 근거로 삼는다 — 워커의
@@ -88,14 +77,18 @@ export async function runIngest(
       expiresAt: verdict.action === 'pass' && enqueue ? expiresAt(verdict.tier, now) : null,
     })
 
+    // recordEvent 가 성공한 뒤에 넣는다. 중복(inserted === false)도 DB 에 있다는
+    // 뜻이므로 본 것으로 친다. 던졌다면 넣지 않아 다음 사이클이 다시 시도한다.
+    state.seen.add(event.externalId)
+
     if (!inserted) { stats.duplicated += 1; continue }
     stats.recorded += 1
     if (enqueue) stats.enqueued += 1
     else if (verdict.action === 'pass') stats.suppressed += 1
   }
 
-  // 마크와 coldStart 는 루프가 끝까지 돌았을 때만 반환된다. recordEvent 가 도중에
-  // 던지면 runIngest 전체가 던지고 호출자가 상태를 갱신하지 않으므로, 다음 사이클이
-  // 같은 구간을 다시 읽는다 — 유니크 제약이 중복을 막아주므로 안전하다.
-  return { stats, state: { highWaterMark, coldStart: false } }
+  // seen 은 가변이라 루프 도중 던져도 그때까지 기록에 성공한 id 는 남는다 —
+  // 재시도 시 이미 쓴 것을 다시 쓰지 않는다. coldStart 는 루프가 끝까지 돌았을
+  // 때만 내려간다.
+  return { stats, state: { seen: state.seen, coldStart: false } }
 }
