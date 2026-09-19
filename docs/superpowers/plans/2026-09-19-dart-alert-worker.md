@@ -1171,6 +1171,12 @@ export type EventStore = {
 
 `apps/worker/src/ports/notifier.ts`:
 ```ts
+/**
+ * 우리가 스스로 조절해서 보내지 않은 경우의 error 값.
+ * 텔레그램의 실제 실패와 구분해야 한다 — 이건 재시도 횟수를 소비하면 안 된다.
+ */
+export const LOCAL_RATE_LIMIT = 'local-rate-limit'
+
 export type SendResult =
   | { ok: true }
   | { ok: false; retryAfterMs: number | null; error: string }
@@ -1928,6 +1934,7 @@ Expected: FAIL — telegram 모듈 없음
 
 `apps/worker/src/adapters/notifier/telegram.ts`:
 ```ts
+import { LOCAL_RATE_LIMIT } from '../../ports/notifier.js'
 import type { Notifier, SendResult } from '../../ports/notifier.js'
 import { createTokenBucket, MESSAGES_PER_MINUTE } from './rate-limiter.js'
 
@@ -1965,7 +1972,7 @@ export function createTelegramNotifier(cfg: TelegramConfig): Notifier {
       // 429를 맞기 전에 우리가 먼저 조인다.
       // 실패로 반환하면 dispatch의 기존 재시도 경로가 그대로 처리한다.
       if (!bucket.tryTake(now())) {
-        return { ok: false, retryAfterMs: REFILL_WAIT_MS, error: 'local-rate-limit' }
+        return { ok: false, retryAfterMs: REFILL_WAIT_MS, error: LOCAL_RATE_LIMIT }
       }
 
       const res = await doFetch(url, {
@@ -2538,6 +2545,7 @@ Expected: FAIL — dispatch 모듈 없음
 import { formatEvent, formatMerged } from '../core/format.js'
 import { MERGE_THRESHOLD } from '../core/policy.js'
 import { MAX_ATTEMPTS, nextAttemptAt } from '../core/retry.js'
+import { LOCAL_RATE_LIMIT } from '../ports/notifier.js'
 import type { Notifier } from '../ports/notifier.js'
 import type { EventStore, PendingOutbox } from '../ports/store.js'
 import type { Summarizer } from '../ports/summarizer.js'
@@ -2612,8 +2620,12 @@ async function applyResult(
     return
   }
 
-  const attempts = item.attempts + 1
-  if (attempts >= MAX_ATTEMPTS) {
+  // 우리가 스스로 조절해서 안 보낸 것은 실패가 아니다 — 시도 횟수를 소비하면
+  // 버스트 때 자가 스로틀링만으로 재시도 예산이 바닥나 정상 알림이 버려진다.
+  const throttled = res.error === LOCAL_RATE_LIMIT
+  const attempts = throttled ? item.attempts : item.attempts + 1
+
+  if (!throttled && attempts >= MAX_ATTEMPTS) {
     await deps.store.markDead(item.id, res.error)
     stats.dead += 1
     return
