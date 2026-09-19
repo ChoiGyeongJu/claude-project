@@ -19,7 +19,8 @@
 - **DART 응답 필드는 9개뿐이다**: `corp_cls`, `corp_name`, `corp_code`, `stock_code`, `report_nm`, `rcept_no`, `flr_nm`, `rcept_dt`, `rm`. `pblntf_ty`는 요청 파라미터이며 **응답에 없다.** 모든 유형 판별은 `report_nm` 문자열 패턴으로 한다.
 - **API 한도**: OpenDART 일 20,000건. 초과 시 에러코드 `020`.
 - **금지 사항**: 호재/악재 판단, 목표가, 매수·매도 의견을 생성하는 코드를 작성하지 않는다. LLM 프롬프트에도 포함하지 않는다.
-- **strip-only 비호환 구문 금지**: Node 가 `.ts` 를 실행할 때 쓰는 strip-only 모드는 **파라미터 프로퍼티**(`constructor(private x: T)`), **enum**, **namespace**, **데코레이터** 를 처리하지 못하고 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 로 죽는다. vitest 는 esbuild 로 트랜스파일하므로 **테스트는 통과하지만 런타임이 죽는다** — 테스트 통과가 이 문제를 잡아주지 않는다. 이 네 가지를 쓰지 말 것.
+- **실행은 항상 컴파일 후**: 소스는 NodeNext 규약대로 `'./keywords.js'` 처럼 `.js` 확장자로 import 하는데 실제 파일은 `.ts` 다. Node 는 이 확장자를 되돌려주지 않으므로 **`.ts` 소스를 직접 실행할 수 없다**(실측 확인). `dev` 스크립트와 Docker 모두 `tsc` 로 컴파일한 뒤 `dist/main.js` 를 실행한다.
+- **strip-only 비호환 구문 금지**: `dist/main.js` 가 `@app/shared` 를 `.ts` 인 채로 로드하므로 그 경로는 여전히 Node 의 strip-only 모드를 탄다. strip-only 는 **파라미터 프로퍼티**(`constructor(private x: T)`), **enum**, **namespace**, **데코레이터** 를 처리하지 못하고 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 로 죽는다. vitest 는 esbuild 로 트랜스파일하므로 **테스트는 통과하지만 런타임이 죽는다** — 테스트 통과가 이 문제를 잡아주지 않는다. 네 가지 모두 쓰지 말 것.
 - **비밀값**: API 키·봇 토큰은 전부 환경변수. 코드·테스트·fixture에 하드코딩 금지.
 - **테스트**: 실제 네트워크를 호출하는 자동 테스트를 만들지 않는다. 외부 응답은 fixture로 고정한다.
 - **커밋**: 각 Task 종료 시 1커밋. 메시지는 Conventional Commits.
@@ -204,7 +205,7 @@ describe('isPass', () => {
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dev": "node --experimental-strip-types src/main.ts"
+    "dev": "tsc -p tsconfig.json && node dist/main.js"
   },
   "dependencies": { "@app/shared": "workspace:*" },
   "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0", "@types/node": "^22.0.0" }
@@ -3253,7 +3254,7 @@ Expected: 전부 PASS
 
 또한 **워커가 실제로 기동하는지** 확인한다 (테스트 통과가 이를 보장하지 않는다):
 
-Run: `cd apps/worker && DATABASE_URL=x DART_API_KEY=$(printf 'k%.0s' {1..40}) TELEGRAM_BOT_TOKEN=t TELEGRAM_CHAT_ID=1 LLM_API_KEY=l node src/main.ts`
+Run: `cd apps/worker && pnpm exec tsc -p tsconfig.json && DATABASE_URL=x DART_API_KEY=$(printf 'k%.0s' {1..40}) TELEGRAM_BOT_TOKEN=t TELEGRAM_CHAT_ID=1 LLM_API_KEY=l node dist/main.js`
 Expected: 설정 파싱과 모듈 로드를 통과해 실행에 들어간다 (DB 연결 실패로 죽는 것은 정상 — `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 나 zod 설정 오류가 **아니어야** 한다). 확인 후 Ctrl-C.
 
 - [ ] **Step 6: 커밋**
