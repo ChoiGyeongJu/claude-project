@@ -113,6 +113,43 @@ function sqlText(fragment: SQL): string {
     .join('')
 }
 
+/** update().set().where() 체인을 흉내내는 fake. set()에 전달된 값을 그대로 기록한다. */
+function fakeUpdateDb() {
+  const calls: { table: string; values: unknown }[] = []
+  const db = {
+    update: (table: unknown) => ({
+      set: (values: unknown) => {
+        calls.push({ table: getTableName(table as never), values })
+        return { where: async () => {} }
+      },
+    }),
+  }
+  return { db: db as unknown as Db, calls }
+}
+
+describe('markFailed', () => {
+  it(
+    '전달받은 attempts 값을 그대로 쓴다 — 스스로 +1 하지 않는다. ' +
+      'store가 스스로 증가시키면 local-rate-limit 스로틀링까지 시도 횟수를 소비해, ' +
+      '자가 조절만으로 정상 알림이 dead 처리될 수 있다 (Task 13 회귀).',
+    async () => {
+      const { db, calls } = fakeUpdateDb()
+      const store = createPostgresStore(db)
+
+      await store.markFailed(7, 'boom', new Date('2026-09-19T06:35:00Z'), 3)
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]?.table).toBe('outbox')
+      // 리터럴 3이어야 한다 — `sql\`attempts + 1\`` 같은 SQL 조각이면 안 된다.
+      expect(calls[0]?.values).toEqual({
+        attempts: 3,
+        lastError: 'boom',
+        nextAttemptAt: new Date('2026-09-19T06:35:00Z'),
+      })
+    },
+  )
+})
+
 describe('claimPending', () => {
   it('유효한 tier 값을 가진 행을 PendingOutbox로 변환하고, jsonb 왕복으로 문자열이 된 firstSeenAt을 Date로 되살린다', async () => {
     const { db } = fakeSelectDb([

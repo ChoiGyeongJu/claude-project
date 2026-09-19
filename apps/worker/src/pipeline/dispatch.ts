@@ -92,6 +92,6 @@ async function applyResult(
     ? new Date(now.getTime() + res.retryAfterMs)
     : nextAttemptAt(item.attempts, now)
 
-  await deps.store.markFailed(item.id, res.error, next)
+  await deps.store.markFailed(item.id, res.error, next, attempts)
   stats.failed += 1
 }

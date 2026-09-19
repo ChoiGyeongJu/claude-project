@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { NormalizedEvent } from '@app/shared'
 import type { EventStore, PendingOutbox } from '../ports/store.js'
 import type { Notifier } from '../ports/notifier.js'
+import { LOCAL_RATE_LIMIT } from '../ports/notifier.js'
 import { noopSummarizer } from '../adapters/summarizer/noop.js'
 import { runDispatch } from './dispatch.js'
 
@@ -22,7 +23,10 @@ function pending(over: Partial<PendingOutbox> = {}): PendingOutbox {
 
 function deps(items: PendingOutbox[], send: Notifier['send']) {
   const markSent = vi.fn(async () => {})
-  const markFailed = vi.fn(async () => {})
+  // vi.fn<EventStore['markFailed']>: 아래 회귀 테스트가 markFailed.mock.calls[0]![3]으로
+  // attempts를 꺼내 다음 사이클에 되먹인다 — 타입 인자가 없으면 dispatch.ts의 마지막 테스트와
+  // 같은 이유로 calls[0]이 빈 튜플로 추론되어 tsc가 거부한다.
+  const markFailed = vi.fn<EventStore['markFailed']>(async () => {})
   const markDead = vi.fn(async () => {})
   const store = {
     claimPending: async () => items,
@@ -60,7 +64,8 @@ describe('runDispatch', () => {
     const { deps: d, markFailed } = deps([pending()], send)
 
     await runDispatch(d, NOW)
-    expect(markFailed).toHaveBeenCalledWith(1, 'boom', new Date(NOW.getTime() + 5_000))
+    // attempts는 store가 스스로 증가시키지 않는다 — dispatch가 계산해 넘긴 최종값(0 + 1)이어야 한다.
+    expect(markFailed).toHaveBeenCalledWith(1, 'boom', new Date(NOW.getTime() + 5_000), 1)
   })
 
   it('429는 retry_after를 그대로 존중한다', async () => {
@@ -68,8 +73,61 @@ describe('runDispatch', () => {
     const { deps: d, markFailed } = deps([pending()], send)
 
     await runDispatch(d, NOW)
-    expect(markFailed).toHaveBeenCalledWith(1, '429', new Date(NOW.getTime() + 7_000))
+    expect(markFailed).toHaveBeenCalledWith(1, '429', new Date(NOW.getTime() + 7_000), 1)
   })
+
+  it('local-rate-limit로 스로틀링되면 markFailed에 attempts를 그대로(증가 없이) 전달한다', async () => {
+    const send = vi.fn(async () => (
+      { ok: false as const, retryAfterMs: 4_000, error: LOCAL_RATE_LIMIT }
+    ))
+    const { deps: d, markFailed, markDead } = deps([pending({ attempts: 2 })], send)
+
+    await runDispatch(d, NOW)
+    // 우리 스스로 조인 것이므로 시도 횟수가 소비되지 않는다 — 2 그대로 넘어가야 한다.
+    expect(markFailed).toHaveBeenCalledWith(1, LOCAL_RATE_LIMIT, new Date(NOW.getTime() + 4_000), 2)
+    expect(markDead).not.toHaveBeenCalled()
+  })
+
+  it('진짜 실패면 markFailed에 attempts + 1을 전달한다', async () => {
+    const send = vi.fn(async () => ({ ok: false as const, retryAfterMs: null, error: 'boom' }))
+    const { deps: d, markFailed } = deps([pending({ attempts: 2 })], send)
+
+    await runDispatch(d, NOW)
+    expect(markFailed).toHaveBeenCalledWith(1, 'boom', new Date(NOW.getTime() + 60_000), 3)
+  })
+
+  it(
+    '스로틀링이 여러 사이클 반복돼도 store에 기록되는 attempts는 누적되지 않는다 — ' +
+      'store가 attempts를 스스로 +1 하면 이 값이 사이클마다 불어나 자가 스로틀링만으로 ' +
+      '재시도 예산이 바닥나고, 그 뒤 진짜 실패 한 번에 dead 처리된다. attempts를 호출자가 ' +
+      '결정해 넘기고 store는 시키는 대로 쓰기만 하면(postgres.ts) 이 값이 절대 불어나지 않는다.',
+    async () => {
+      const send = vi.fn(async () => (
+        { ok: false as const, retryAfterMs: 4_000, error: LOCAL_RATE_LIMIT }
+      ))
+
+      // 1번째 사이클: DB에서 읽어온 attempts가 4라고 가정한다.
+      const cycle1 = deps([pending({ attempts: 4 })], send)
+      await runDispatch(cycle1.deps, NOW)
+      expect(cycle1.markFailed).toHaveBeenCalledWith(
+        1, LOCAL_RATE_LIMIT, new Date(NOW.getTime() + 4_000), 4,
+      )
+      expect(cycle1.markDead).not.toHaveBeenCalled()
+
+      // store가 "시키는 대로 쓴다"는 계약을 지킨다면, 다음 사이클의 claimPending은
+      // 여전히 attempts: 4를 돌려준다 (5로 불어나 있으면 안 된다).
+      const attemptsWrittenByStore = cycle1.markFailed.mock.calls[0]![3]
+      expect(attemptsWrittenByStore).toBe(4)
+
+      // 2번째 사이클: 다시 스로틀링돼도 여전히 dead가 아니어야 한다.
+      const cycle2 = deps([pending({ attempts: attemptsWrittenByStore })], send)
+      await runDispatch(cycle2.deps, NOW)
+      expect(cycle2.markFailed).toHaveBeenCalledWith(
+        1, LOCAL_RATE_LIMIT, new Date(NOW.getTime() + 4_000), 4,
+      )
+      expect(cycle2.markDead).not.toHaveBeenCalled()
+    },
+  )
 
   it('최대 시도를 소진하면 dead 처리한다', async () => {
     const send = vi.fn(async () => ({ ok: false as const, retryAfterMs: null, error: 'boom' }))

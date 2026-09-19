@@ -116,10 +116,10 @@ export function createPostgresStore(db: Db): EventStore {
       await db.update(outbox).set({ status: 'sent' }).where(eq(outbox.id, id))
     },
 
-    async markFailed(id, error, nextAttemptAt) {
+    async markFailed(id, error, nextAttemptAt, attempts) {
       await db
         .update(outbox)
-        .set({ attempts: sql`${outbox.attempts} + 1`, lastError: error, nextAttemptAt })
+        .set({ attempts, lastError: error, nextAttemptAt })
         .where(eq(outbox.id, id))
     },
 
