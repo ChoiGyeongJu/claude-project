@@ -1,0 +1,43 @@
+{
+  "status": "000",
+  "message": "정상",
+  "page_no": 1,
+  "page_count": 100,
+  "total_count": 3,
+  "total_page": 1,
+  "list": [
+    {
+      "corp_cls": "Y",
+      "corp_name": "샘플전자",
+      "corp_code": "00126380",
+      "stock_code": "005930",
+      "report_nm": "단일판매·공급계약체결",
+      "rcept_no": "20260919000123",
+      "flr_nm": "샘플전자",
+      "rcept_dt": "20260919",
+      "rm": "유"
+    },
+    {
+      "corp_cls": "K",
+      "corp_name": "샘플바이오",
+      "corp_code": "00234567",
+      "stock_code": "",
+      "report_nm": "사업보고서 (2025.12)",
+      "rcept_no": "20260919000124",
+      "flr_nm": "샘플바이오",
+      "rcept_dt": "20260919",
+      "rm": ""
+    },
+    {
+      "corp_cls": "N",
+      "corp_name": "샘플코넥스",
+      "corp_code": "00345678",
+      "stock_code": "900100",
+      "report_nm": "무상증자결정",
+      "rcept_no": "20260919000125",
+      "flr_nm": "샘플코넥스",
+      "rcept_dt": "20260919",
+      "rm": "넥"
+    }
+  ]
+}
