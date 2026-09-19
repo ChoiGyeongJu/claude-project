@@ -1,21 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { isTooOld, ttlFor, expiresAt, MAX_DELIVERY_AGE_MS, MERGE_THRESHOLD } from './policy.js'
+import { ttlFor, expiresAt, MERGE_THRESHOLD } from './policy.js'
 
 const NOW = new Date('2026-09-19T06:30:00.000Z')
-
-describe('isTooOld — 재기동 폭탄 방지', () => {
-  it('10분 이내면 발송한다', () => {
-    expect(isTooOld(new Date(NOW.getTime() - 9 * 60_000), NOW)).toBe(false)
-  })
-
-  it('10분을 넘으면 발송하지 않는다', () => {
-    expect(isTooOld(new Date(NOW.getTime() - 11 * 60_000), NOW)).toBe(true)
-  })
-
-  it('상한은 정확히 10분이다', () => {
-    expect(MAX_DELIVERY_AGE_MS).toBe(10 * 60_000)
-  })
-})
 
 describe('ttlFor — 늦은 알림은 보내지 않는다', () => {
   it('critical은 5분', () => expect(ttlFor('critical')).toBe(5 * 60_000))

@@ -75,6 +75,16 @@ export function createPostgresStore(db: Db): EventStore {
       })
     },
 
+    async maxExternalId(sourceId) {
+      // UNIQUE (source_id, external_id) 인덱스를 역방향으로 한 번 타고 끝난다 —
+      // 기동 시 1회만 호출되므로 비용은 사실상 없다.
+      const rows = await db
+        .select({ max: sql<string | null>`max(${events.externalId})` })
+        .from(events)
+        .where(eq(events.sourceId, sourceId))
+      return rows[0]?.max ?? null
+    },
+
     async claimPending(now, limit) {
       const rows = await db
         .select()

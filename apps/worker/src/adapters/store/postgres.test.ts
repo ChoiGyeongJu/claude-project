@@ -391,3 +391,55 @@ describe('digestFor', () => {
     expect(result.missedTotal).toBe(300)
   })
 })
+
+/**
+ * select().from().where()[.orderBy().limit()] 를 흉내내되, 체인 자체가 thenable 이라
+ * 어느 단계에서 await 해도 rows 가 나온다 — maxExternalId 는 where() 에서,
+ * lastEventKstDate 는 limit() 에서 await 하기 때문이다.
+ */
+type SelectChain = {
+  from: () => SelectChain
+  where: (cond: unknown) => SelectChain
+  orderBy: (...args: unknown[]) => SelectChain
+  limit: () => SelectChain
+  then: (resolve: (v: unknown) => void) => void
+}
+
+function fakeThenableDb(rows: unknown[]) {
+  const whereCalls: unknown[] = []
+  const orderByCalls: unknown[][] = []
+  const chain: SelectChain = {
+    from: () => chain,
+    where: (cond) => { whereCalls.push(cond); return chain },
+    orderBy: (...args) => { orderByCalls.push(args); return chain },
+    limit: () => chain,
+    then: (resolve) => resolve(rows),
+  }
+  const db = { select: () => chain }
+  return { db: db as unknown as Db, whereCalls, orderByCalls }
+}
+
+describe('maxExternalId — 하이워터 마크의 기동 시 시드', () => {
+  it('해당 source 의 max(external_id) 를 반환한다', async () => {
+    const { db, whereCalls } = fakeThenableDb([{ max: '20260919000456' }])
+    const store = createPostgresStore(db)
+
+    expect(await store.maxExternalId('dart')).toBe('20260919000456')
+
+    // source_id 로 좁히지 않으면 나중에 소스가 추가됐을 때(스펙 §3 의 2·3단계)
+    // 다른 소스의 id 가 DART 의 마크를 덮어써 공시가 통째로 건너뛰어진다.
+    expect(collectParamValues(whereCalls[0])).toContain('dart')
+  })
+
+  it('행이 없으면 null 을 반환한다 — 빈 DB 에서는 아무것도 건너뛰지 않는다', async () => {
+    const { db } = fakeThenableDb([])
+    expect(await createPostgresStore(db).maxExternalId('dart')).toBeNull()
+  })
+
+  it('max 가 SQL NULL 로 와도 null 로 정규화한다', async () => {
+    // 빈 테이블에 max() 를 걸면 행은 1개 나오되 값이 NULL 이다. 이걸 그대로
+    // 마크로 쓰면 externalId <= null 비교가 되어 필터가 무의미해진다.
+    const { db } = fakeThenableDb([{ max: null }])
+    expect(await createPostgresStore(db).maxExternalId('dart')).toBeNull()
+  })
+})

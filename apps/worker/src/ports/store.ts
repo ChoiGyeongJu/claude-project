@@ -20,6 +20,15 @@ export type EventStore = {
     opts: { enqueue: boolean; expiresAt: Date | null },
   ): Promise<boolean>
 
+  /**
+   * 이 소스에서 기록된 가장 큰 externalId. 행이 없으면 null.
+   *
+   * 재기동 시 하이워터 마크를 이 값으로 심는다. 심지 않으면 매 사이클 목록 API가
+   * 돌려주는 최신 100건 전부가 recordEvent 로 가고(건당 트랜잭션 1개), 2.5초 주기가
+   * DB 왕복에 묶여 설정한 주기대로 돌지 못한다.
+   */
+  maxExternalId(sourceId: string): Promise<string | null>
+
   claimPending(now: Date, limit: number): Promise<PendingOutbox[]>
   markSent(outboxId: number): Promise<void>
   /**

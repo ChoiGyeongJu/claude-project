@@ -15,6 +15,16 @@ function silentLog(): CycleLogger {
   return { info: vi.fn(), error: vi.fn() }
 }
 
+/** 이미 한 사이클을 돈 정상 가동 상태. 콜드 스타트 억제는 ingest.test.ts 가 다룬다. */
+function warmState(heartbeatFailures = 0) {
+  return {
+    lastDigestDate: TODAY,
+    heartbeatFailures,
+    highWaterMark: '20260919000100',
+    coldStart: false,
+  }
+}
+
 function failingStore(): EventStore {
   return {
     incrementApiUsage: async () => {
@@ -45,7 +55,7 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
 
     const result = await runCycle(
       { source, store: failingStore(), notifier, summarizer, heartbeat, circuit: createCircuit(), log },
-      { lastDigestDate: TODAY, heartbeatFailures: 0 },
+      warmState(),
       NOW,
     )
 
@@ -62,7 +72,7 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
 
     const result = await runCycle(
       { source, store: healthyStore(), notifier, summarizer, heartbeat, circuit: createCircuit(), log },
-      { lastDigestDate: TODAY, heartbeatFailures: 0 },
+      warmState(),
       NOW,
     )
 
@@ -78,7 +88,7 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
 
     const result = await runCycle(
       { source, store: failingStore(), notifier, summarizer, heartbeat, circuit: createCircuit(), log },
-      { lastDigestDate: TODAY, heartbeatFailures: 2 },
+      warmState(2),
       NOW,
     )
 
@@ -149,7 +159,7 @@ describe('runLoop — 종료 신호가 대기 중에 오면 다음 사이클 없
 
     await runLoop(
       { source, store, notifier, summarizer, heartbeat, circuit: createCircuit(), log },
-      { lastDigestDate: TODAY, heartbeatFailures: 0 },
+      warmState(),
       fakeSleeper,
       { shouldStop: () => shuttingDown },
     )
@@ -168,7 +178,7 @@ describe('runLoop — 종료 신호가 대기 중에 오면 다음 사이클 없
 
     await runLoop(
       { source, store, notifier, summarizer, heartbeat, circuit: createCircuit(), log },
-      { lastDigestDate: TODAY, heartbeatFailures: 0 },
+      warmState(),
       createSleeper(),
       { shouldStop: () => true },
     )

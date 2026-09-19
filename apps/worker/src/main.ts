@@ -41,11 +41,23 @@ async function main(): Promise<void> {
       sleeper.wakeNow()
     })
   }
-  log.info('worker started')
+  // 하이워터 마크를 DB에서 심는다. 이게 없으면 첫 사이클이 최신 100건을 전부
+  // recordEvent 로 보내고, 그 뒤로도 매 사이클 같은 100건이 no-op 트랜잭션으로
+  // 반복된다 — 2.5초 주기가 DB 왕복 속도에 묶인다.
+  const highWaterMark = await store.maxExternalId(source.id)
+  log.info({ highWaterMark }, 'worker started')
 
   await runLoop(
     { source, store, notifier, summarizer, heartbeat, circuit, log },
-    { lastDigestDate: kstDateString(new Date()), heartbeatFailures: 0 },
+    {
+      lastDigestDate: kstDateString(new Date()),
+      heartbeatFailures: 0,
+      highWaterMark,
+      // 첫 사이클은 기록만 하고 한 건도 발송하지 않는다. 워커는 자신이 얼마나
+      // 오래 죽어 있었는지 알 수 없으므로, 마크 위에 쌓인 물량이 신규 1건인지
+      // 사흘치 밀린 것인지 구분할 방법이 없다 (스펙 §6.4).
+      coldStart: true,
+    },
     sleeper,
     { shouldStop: () => shuttingDown },
   )

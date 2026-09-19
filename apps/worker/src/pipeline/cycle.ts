@@ -8,6 +8,7 @@ import type { Notifier } from '../ports/notifier.js'
 import type { Summarizer } from '../ports/summarizer.js'
 import type { Heartbeat } from './health.js'
 import { runIngest } from './ingest.js'
+import type { IngestState } from './ingest.js'
 import { runDispatch } from './dispatch.js'
 import { catchUpDigests } from './digest.js'
 
@@ -34,7 +35,7 @@ export type CycleDeps = {
 export type CycleState = {
   lastDigestDate: string
   heartbeatFailures: number
-}
+} & IngestState
 
 export type CycleResult = CycleState & { sleepMs: number }
 
@@ -44,18 +45,39 @@ export async function runCycle(
   const kstDate = kstDateString(now)
   let lastDigestDate = state.lastDigestDate
   let heartbeatFailures = state.heartbeatFailures
+  // 실패 시에는 진입 상태 그대로 돌려준다 — 특히 coldStart 가 true 로 남아야
+  // 기동 직후 DART 가 불통이었던 경우에도 첫 성공 사이클이 억제 사이클이 된다.
+  let ingestState: IngestState = { highWaterMark: state.highWaterMark, coldStart: state.coldStart }
   let sleepMs: number
 
   try {
     const used = await deps.store.incrementApiUsage(deps.source.id, kstDate)
-    const ingest = await runIngest({ source: deps.source, store: deps.store }, now)
+    const ingest = await runIngest(
+      { source: deps.source, store: deps.store }, ingestState, now,
+    )
+    ingestState = ingest.state
     const dispatch = await runDispatch(
       { store: deps.store, notifier: deps.notifier, summarizer: deps.summarizer }, now,
     )
 
     deps.circuit.recordSuccess()
-    if (ingest.recorded > 0 || dispatch.sent > 0) {
-      deps.log.info({ ingest, dispatch, used }, 'cycle')
+
+    // 억제는 반드시 로그에 남긴다. 운영자는 실시간 대응을 하지 않으므로, 재기동 후
+    // "왜 그때 알림이 한 건도 안 왔는가"에 답할 기록이 여기밖에 없다.
+    if (state.coldStart) {
+      deps.log.info(
+        {
+          fetched: ingest.stats.fetched,
+          suppressed: ingest.stats.suppressed,
+          recorded: ingest.stats.recorded,
+          highWaterMark: ingest.state.highWaterMark,
+        },
+        'cold start — backlog recorded, nothing enqueued',
+      )
+    }
+
+    if (ingest.stats.recorded > 0 || dispatch.sent > 0) {
+      deps.log.info({ ingest: ingest.stats, dispatch, used }, 'cycle')
     }
 
     // 자정이 지나면 밀린 날짜를 하루씩 모두 보낸다. `= kstDate` 로 건너뛰면
@@ -94,7 +116,13 @@ export async function runCycle(
     heartbeatFailures = (await deps.heartbeat.ping()) ? 0 : heartbeatFailures + 1
   }
 
-  return { sleepMs, lastDigestDate, heartbeatFailures }
+  return {
+    sleepMs,
+    lastDigestDate,
+    heartbeatFailures,
+    highWaterMark: ingestState.highWaterMark,
+    coldStart: ingestState.coldStart,
+  }
 }
 
 export type Sleeper = {
@@ -134,9 +162,9 @@ export async function runLoop(
 ): Promise<CycleState> {
   let state = initialState
   while (!control.shouldStop()) {
-    const result = await runCycle(deps, state, new Date())
-    state = { lastDigestDate: result.lastDigestDate, heartbeatFailures: result.heartbeatFailures }
-    await sleeper.sleep(result.sleepMs)
+    const { sleepMs, ...next } = await runCycle(deps, state, new Date())
+    state = next
+    await sleeper.sleep(sleepMs)
   }
   return state
 }
