@@ -1332,6 +1332,7 @@ git commit -m "feat: 포트 인터페이스와 Drizzle 스키마, 초기 마이�
 ```ts
 import { describe, it, expect, vi } from 'vitest'
 import type { NormalizedEvent } from '@app/shared'
+import { getTableName } from 'drizzle-orm'
 import { createPostgresStore, type Db } from './postgres.js'
 
 const event: NormalizedEvent = {
@@ -1350,7 +1351,9 @@ function fakeDb(insertedEventId: number | null) {
   const calls: string[] = []
   const tx = {
     insert: (table: unknown) => {
-      const name = (table as { _: { name: string } })._.name
+      // drizzle 의 `_` 는 TypeScript 전용 팬텀 속성이라 런타임 값이 없다.
+      // 반드시 getTableName() 을 써야 한다 (실측 확인됨).
+      const name = getTableName(table as never)
       calls.push(name)
       return {
         values: () => ({
