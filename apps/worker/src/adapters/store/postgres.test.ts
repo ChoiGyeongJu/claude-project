@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { getTableName } from 'drizzle-orm'
 import type { NormalizedEvent } from '@app/shared'
 import { createPostgresStore, type Db } from './postgres.js'
 
@@ -18,7 +19,7 @@ function fakeDb(insertedEventId: number | null) {
   const calls: string[] = []
   const tx = {
     insert: (table: unknown) => {
-      const name = (table as { _: { name: string } })._.name
+      const name = getTableName(table as never)
       calls.push(name)
       return {
         values: () => ({
