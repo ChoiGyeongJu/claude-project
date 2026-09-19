@@ -151,4 +151,45 @@ describe('createTelegramNotifier', () => {
       expect(r.error).toBe('Invalid bot token: ***')
     }
   })
+
+  it('빈 토큰은 메시지를 손상시키지 않는다', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        ok: false,
+        description: 'some error *** message',
+      }),
+    })) as unknown as typeof fetch
+    const n = createTelegramNotifier({
+      token: '', chatId: '-100', fetchImpl,
+    })
+
+    const r = await n.send('x')
+    // 빈 토큰으로는 교체가 일어나지 않아야 하고, *** 문자가 그대로 남아있어야 한다
+    if (!r.ok) {
+      expect(r.error).toBe('some error *** message')
+    }
+  })
+
+  it('짧은 토큰(8자 미만)은 교체되지 않는다', async () => {
+    const shortToken = 'short'
+    const fetchImpl = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        ok: false,
+        description: `Invalid token: ${shortToken}`,
+      }),
+    })) as unknown as typeof fetch
+    const n = createTelegramNotifier({
+      token: shortToken, chatId: '-100', fetchImpl,
+    })
+
+    const r = await n.send('x')
+    // 짧은 토큰은 교체되지 않으므로 원본 토큰이 그대로 남아있다
+    if (!r.ok) {
+      expect(r.error).toBe(`Invalid token: ${shortToken}`)
+    }
+  })
 })
