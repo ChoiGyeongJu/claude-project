@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { getTableName } from 'drizzle-orm'
+import { getTableName, SQL, StringChunk } from 'drizzle-orm'
 import type { NormalizedEvent } from '@app/shared'
 import { createPostgresStore, type Db } from './postgres.js'
+import { outbox } from './schema.js'
 
 const event: NormalizedEvent = {
   sourceId: 'dart',
@@ -79,30 +80,48 @@ describe('recordEvent', () => {
   })
 })
 
-/** select().from().where().orderBy().limit() 체인을 흉내내는 fake. */
+/**
+ * select().from().where().orderBy().limit() 체인을 흉내내는 fake.
+ *
+ * orderBy에 전달된 인자를 그대로 기록해 반환한다 — 이 fake는 실제 정렬을
+ * 수행하지 않으므로(그럴 수도 없다: 정렬은 Postgres가 한다), rows의 순서를
+ * 검증하는 테스트는 정렬 로직이 있든 없든 통과해 아무것도 증명하지 못한다.
+ * 대신 orderBy로 전달된 SQL 조각 자체를 검증해야 한다.
+ */
 function fakeSelectDb(rows: unknown[]) {
+  const orderByCalls: unknown[][] = []
   const db = {
     select: () => ({
       from: () => ({
         where: () => ({
-          orderBy: () => ({
-            limit: async () => rows,
-          }),
+          orderBy: (...args: unknown[]) => {
+            orderByCalls.push(args)
+            return { limit: async () => rows }
+          },
         }),
       }),
     }),
   }
-  return db as unknown as Db
+  return { db: db as unknown as Db, orderByCalls }
+}
+
+/** SQL 조각의 StringChunk들을 이어붙여 리터럴 텍스트를 복원한다. */
+function sqlText(fragment: SQL): string {
+  return fragment.queryChunks
+    .filter((c): c is StringChunk => c instanceof StringChunk)
+    .map((c) => c.value.join(''))
+    .join('')
 }
 
 describe('claimPending', () => {
-  it('유효한 tier 값을 가진 행을 PendingOutbox로 변환한다', async () => {
-    const db = fakeSelectDb([
+  it('유효한 tier 값을 가진 행을 PendingOutbox로 변환하고, jsonb 왕복으로 문자열이 된 firstSeenAt을 Date로 되살린다', async () => {
+    const { db } = fakeSelectDb([
       {
         id: 1,
         eventId: 10,
         tier: 'critical',
-        payload: event,
+        // 실제 Postgres에서는 jsonb 왕복 후 Date가 ISO 문자열로 온다.
+        payload: { ...event, occurredAt: event.occurredAt?.toISOString() ?? null, firstSeenAt: event.firstSeenAt.toISOString() },
         attempts: 0,
         expiresAt: new Date('2026-09-19T06:35:00Z'),
       },
@@ -121,11 +140,13 @@ describe('claimPending', () => {
         expiresAt: new Date('2026-09-19T06:35:00Z'),
       },
     ])
+    expect(rows[0]?.event.firstSeenAt).toBeInstanceOf(Date)
+    expect(rows[0]?.event.occurredAt).toBeInstanceOf(Date)
   })
 
   it('tier 값이 유효하지 않은 행은 건너뛰고, 나머지 행은 정상 반환한다 — DB에 CHECK 제약이 없어 손상된 값이 들어올 수 있다', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const db = fakeSelectDb([
+    const { db } = fakeSelectDb([
       {
         id: 1,
         eventId: 10,
@@ -160,4 +181,38 @@ describe('claimPending', () => {
     expect(consoleError).toHaveBeenCalled()
     consoleError.mockRestore()
   })
+
+  it(
+    'critical tier를 nextAttemptAt보다 먼저 정렬한다 — ' +
+      'outbox 적체 시 TTL이 가장 짧은(5분) critical 알림이 배치 경계에서 밀려 만료되는 것을 막는다',
+    async () => {
+      const { db, orderByCalls } = fakeSelectDb([])
+      const store = createPostgresStore(db)
+
+      await store.claimPending(new Date('2026-09-19T06:31:00Z'), 10)
+
+      // fakeSelectDb는 정렬을 실제로 수행하지 않는다 — rows 순서로는 이 로직을
+      // 증명할 수 없다. orderBy에 실제로 전달된 SQL 조각을 검증한다.
+      expect(orderByCalls).toHaveLength(1)
+      const args = orderByCalls[0] ?? []
+      expect(args).toHaveLength(2)
+      const [tierOrder, timeOrder] = args as [SQL, SQL]
+
+      // 1번째 기준: outbox.tier를 참조하는 CASE WHEN critical → 0, 그 외 → 1.
+      // asc(nextAttemptAt) 하나만 남는 회귀가 생기면 orderBy가 인자 1개로
+      // 호출되어 위 toHaveLength(2)에서 이미 실패하고, 컬럼이 바뀌면 아래에서 실패한다.
+      expect(tierOrder).toBeInstanceOf(SQL)
+      expect(tierOrder.queryChunks).toContain(outbox.tier)
+      const tierText = sqlText(tierOrder)
+      expect(tierText).toContain('CASE WHEN')
+      expect(tierText).toContain('critical')
+      expect(tierText).toContain('THEN 0 ELSE 1 END')
+
+      // 2번째 기준: nextAttemptAt 오름차순 (critical 안에서도, non-critical 안에서도
+      // 먼저 접수된 것부터 처리하기 위함).
+      expect(timeOrder).toBeInstanceOf(SQL)
+      expect(timeOrder.queryChunks).toContain(outbox.nextAttemptAt)
+      expect(sqlText(timeOrder).toLowerCase()).toContain('asc')
+    },
+  )
 })

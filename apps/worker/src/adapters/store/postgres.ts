@@ -12,6 +12,24 @@ function isTier(value: string): value is Tier {
   return (VALID_TIERS as readonly string[]).includes(value)
 }
 
+/**
+ * jsonb 컬럼은 Date 타입이 없어 왕복하면 occurredAt/firstSeenAt이 ISO 문자열로 저장된다.
+ * NormalizedEvent는 이 둘을 Date로 못박아 두므로, 반환 직전에 되살린다.
+ */
+type StoredEventPayload = Omit<NormalizedEvent, 'occurredAt' | 'firstSeenAt'> & {
+  occurredAt: string | null
+  firstSeenAt: string
+}
+
+function rehydrateEvent(payload: unknown): NormalizedEvent {
+  const raw = payload as StoredEventPayload
+  return {
+    ...raw,
+    occurredAt: raw.occurredAt ? new Date(raw.occurredAt) : null,
+    firstSeenAt: new Date(raw.firstSeenAt),
+  }
+}
+
 export function createPostgresStore(db: Db): EventStore {
   return {
     async recordEvent(event, verdict, opts) {
@@ -62,7 +80,14 @@ export function createPostgresStore(db: Db): EventStore {
         .select()
         .from(outbox)
         .where(and(eq(outbox.status, 'pending'), lte(outbox.nextAttemptAt, now)))
-        .orderBy(asc(outbox.nextAttemptAt))
+        // critical을 항상 먼저 고려한다 — outbox가 nextAttemptAt 기준으로만 정렬되면
+        // limit 경계에서 critical(TTL 5분)이 non-critical 뒤로 밀려 claim되기 전에
+        // 만료될 수 있다. Task 13이 배치 "안"에서 tier를 나누는 것과는 별개로,
+        // 배치 "경계"에서부터 critical을 우선해야 한다.
+        .orderBy(
+          sql`CASE WHEN ${outbox.tier} = 'critical' THEN 0 ELSE 1 END`,
+          asc(outbox.nextAttemptAt),
+        )
         .limit(limit)
 
       const pending: PendingOutbox[] = []
@@ -79,7 +104,7 @@ export function createPostgresStore(db: Db): EventStore {
           id: r.id,
           eventId: r.eventId,
           tier: r.tier,
-          event: r.payload as unknown as NormalizedEvent,
+          event: rehydrateEvent(r.payload),
           attempts: r.attempts,
           expiresAt: r.expiresAt,
         })
