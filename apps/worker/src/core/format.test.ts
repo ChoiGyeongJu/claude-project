@@ -30,7 +30,7 @@ describe('formatEvent', () => {
     expect(msg).toContain('샘플\\_전자')
     expect(msg).toContain('005930')
     expect(msg).toContain('단일판매')
-    expect(msg).toContain(e.url)
+    expect(msg).toContain(escapeMarkdownV2(e.url))
     expect(msg).toContain(DISCLAIMER)
   })
 
@@ -53,5 +53,27 @@ describe('formatMerged', () => {
     expect(msg).toContain('단일판매')
     expect(msg).toContain('무상증자결정')
     expect(msg).toContain(DISCLAIMER)
+  })
+})
+
+describe('escape invariant — 예약문자 누락 감지', () => {
+  it('예약문자를 포함한 모든 입력을 올바르게 이스케이프한다', () => {
+    const msg = formatEvent(e, 'critical')
+
+    // Company name and ticker must appear escaped (company name has _)
+    const escapedName = escapeMarkdownV2(e.subject!.name)
+    const escapedTicker = escapeMarkdownV2(e.subject!.ticker!)
+    expect(msg).toContain(escapedName)
+    expect(msg).toContain(escapedTicker)
+
+    // URL must appear fully escaped (contains . = ? etc.)
+    const escapedUrl = escapeMarkdownV2(e.url)
+    expect(msg).toContain(escapedUrl)
+
+    // Critical: verify unescaped reserved characters from URL don't appear
+    // If someone removes escapeMarkdownV2(e.url), these patterns will leak through
+    expect(msg).not.toContain('dart.fss.or.kr')
+    expect(msg).not.toContain('rcpNo=')
+    expect(msg).not.toContain('main.do')
   })
 })

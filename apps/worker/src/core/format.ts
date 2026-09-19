@@ -27,7 +27,7 @@ export function formatEvent(e: NormalizedEvent, tier: Tier, summary?: string): s
     escapeMarkdownV2(e.title),
   ]
   if (summary) lines.push('', escapeMarkdownV2(summary))
-  lines.push('', e.url, '', DISCLAIMER)
+  lines.push('', escapeMarkdownV2(e.url), '', DISCLAIMER)
   return lines.join('\n')
 }
 
@@ -36,7 +36,7 @@ export function formatMerged(
 ): string {
   const head = `📢 공시 ${items.length}건`
   const body = items.map(({ event, tier }) =>
-    `${TIER_ICON[tier]} ${subjectLine(event)} — ${escapeMarkdownV2(event.title)}\n${event.url}`,
+    `${TIER_ICON[tier]} ${subjectLine(event)} — ${escapeMarkdownV2(event.title)}\n${escapeMarkdownV2(event.url)}`,
   )
   return [head, '', ...body, '', DISCLAIMER].join('\n')
 }
