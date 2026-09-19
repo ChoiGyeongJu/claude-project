@@ -268,6 +268,26 @@ function collectParamValues(node: unknown, out: unknown[] = []): unknown[] {
   return out
 }
 
+/**
+ * SQL 조각 트리를 재귀적으로 순회하며 모든 StringChunk 텍스트를 모은다.
+ *
+ * drizzle-orm 0.45.2 소스(sql/expressions/conditions.js)를 직접 읽어 확인한 구조:
+ * `and(c1, c2, ...)`(조건 2개 이상)는 `new SQL([StringChunk("("), sql.join(conds, StringChunk(" and ")), StringChunk(")")])`를
+ * 반환하고, `or(...)`는 구분자만 `StringChunk(" or ")`로 다르다 — 조건들 자체(각각 eq/gte/lt가 만든 SQL)는
+ * 동일하므로, 리프 값(Param)만 비교하면 and와 or를 구분하지 못한다. 이 함수로 얻은 텍스트에서
+ * " and " / " or " 구분자 자체를 확인해야 조합자(combinator)를 고정할 수 있다.
+ */
+function collectStringChunkText(node: unknown, out: string[] = []): string[] {
+  if (node instanceof StringChunk) {
+    out.push(node.value.join(''))
+    return out
+  }
+  if (node instanceof SQL) {
+    for (const chunk of node.queryChunks) collectStringChunkText(chunk, out)
+  }
+  return out
+}
+
 type DigestChain = {
   from: () => DigestChain
   innerJoin: () => DigestChain
@@ -279,11 +299,11 @@ type DigestChain = {
 }
 
 /**
- * digestFor()가 순서대로 날리는 4개 select 쿼리(sent, dead, missed, errors)를 흉내내는 fake.
- * 체인 길이가 쿼리마다 달라(groupBy/orderBy/limit 유무) 모든 메서드를 no-op으로 체이닝하고,
- * where()에 전달된 조건만 호출 순서대로 기록한다. 4개 쿼리는 Promise.all 없이 순차적으로
- * await되므로 — 실제 구현이 그렇게 짜여 있다 — 공유 카운터만으로 몇 번째 select()인지
- * 안전하게 구분할 수 있다.
+ * digestFor()가 순서대로 날리는 5개 select 쿼리(sent, dead, missed, errors, missedTotal)를
+ * 흉내내는 fake. 체인 길이가 쿼리마다 달라(groupBy/orderBy/limit 유무) 모든 메서드를 no-op으로
+ * 체이닝하고, where()에 전달된 조건만 호출 순서대로 기록한다. 5개 쿼리는 Promise.all 없이
+ * 순차적으로 await되므로 — 실제 구현이 그렇게 짜여 있다 — 공유 카운터만으로 몇 번째
+ * select()인지 안전하게 구분할 수 있다.
  */
 function fakeDigestDb(rowsByCall: unknown[][]) {
   const whereCalls: unknown[] = []
@@ -311,19 +331,28 @@ function fakeDigestDb(rowsByCall: unknown[][]) {
 
 describe('digestFor', () => {
   it(
-    '미매칭 후보 조회는 verdict=drop AND rule=no-keyword-match 두 조건을 모두 건다 — ' +
-      '하나라도 빠지면 전체 drop이 쏟아져 다이제스트가 읽히지 않거나(노이즈), ' +
-      '아예 걸러져 신호가 사라진다(과다 제한). 순서: 0=sent, 1=dead, 2=missed, 3=errors.',
+    '미매칭 후보 조회는 verdict=drop AND rule=no-keyword-match 두 조건을 AND로 묶는다 — ' +
+      '조건 하나가 빠지거나 AND가 OR로 바뀌면 전체 drop이 쏟아져 다이제스트가 읽히지 않거나(노이즈), ' +
+      '아예 걸러져 신호가 사라진다(과다 제한). 순서: 0=sent, 1=dead, 2=missed, 3=errors, 4=missedTotal.',
     async () => {
-      const { db, whereCalls } = fakeDigestDb([[], [], [], []])
+      const { db, whereCalls } = fakeDigestDb([[], [], [], [], []])
       const store = createPostgresStore(db)
 
       await store.digestFor('2026-09-19')
 
       const missedWhere = whereCalls[2]
+
+      // 리프 값: 두 조건의 값이 실제로 쿼리에 쓰였는가.
       const values = collectParamValues(missedWhere)
       expect(values).toContain('drop')
       expect(values).toContain('no-keyword-match')
+
+      // 조합자: 값만 확인하면 and(...)를 or(...)로 바꿔도(여전히 두 값 다 등장) 통과해 버린다 —
+      // or로 바뀌면 조건 하나만 맞아도 걸리므로 이 조회가 반환하는 행이 폭발한다.
+      // " and " / " or " 구분자 리터럴 자체가 쿼리에 어떻게 쓰였는지 확인해야 잡을 수 있다.
+      const text = collectStringChunkText(missedWhere).join('')
+      expect(text).toContain(' and ')
+      expect(text).not.toContain(' or ')
     },
   )
 
@@ -337,11 +366,28 @@ describe('digestFor', () => {
         { err: 'telegram-429', n: 1 },
         { err: null, n: 7 }, // 실제로는 isNotNull()이 SQL 단에서 걸러내는 행 — 매핑 가드가 통과시키지 않는지 확인
       ],
+      [], // missedTotal
     ])
     const store = createPostgresStore(db)
 
     const result = await store.digestFor('2026-09-19')
 
     expect(result.errorCounts).toEqual({ 'dart-timeout': 3, 'telegram-429': 1 })
+  })
+
+  it('미매칭 총계를 표시 목록과 별도로 잘리지 않게 센다 — 50건 상한에 걸려도 실제 건수를 알 수 있어야 한다', async () => {
+    const { db } = fakeDigestDb([
+      [], // sent
+      [], // dead
+      Array.from({ length: 50 }, () => ({ title: 't', corpName: 'c', ticker: null })), // missed (상한 도달)
+      [], // errors
+      [{ n: 300 }], // missedTotal — 상한과 무관한 진짜 총계
+    ])
+    const store = createPostgresStore(db)
+
+    const result = await store.digestFor('2026-09-19')
+
+    expect(result.missedCandidates).toHaveLength(50)
+    expect(result.missedTotal).toBe(300)
   })
 })

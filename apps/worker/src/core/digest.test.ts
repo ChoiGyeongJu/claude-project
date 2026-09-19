@@ -11,6 +11,7 @@ const data: DigestData = {
     { title: '특허권취득', corpName: '샘플바이오', ticker: '123456' },
   ],
   errorCounts: { 'dart-timeout': 3, 'telegram-429': 1 },
+  missedTotal: 2,
 }
 
 describe('formatDigest', () => {
@@ -42,7 +43,21 @@ describe('formatDigest', () => {
   })
 
   it('미매칭이 없으면 그 사실을 표시한다', () => {
-    const s = formatDigest({ ...data, missedCandidates: [] })
+    const s = formatDigest({ ...data, missedCandidates: [], missedTotal: 0 })
     expect(s).toContain('미매칭 0건')
+  })
+
+  it('미매칭 총계가 표시 건수보다 많으면(상한 잘림) 총계와 잘림 사실을 함께 보여준다', () => {
+    // missedCandidates는 상위 50건까지만 담기지만(어댑터의 .limit(50)), 실제로는
+    // 그보다 많이 드롭됐을 수 있다 — missedTotal이 진짜 심각도, length는 표시 개수일 뿐이다.
+    const s = formatDigest({ ...data, missedTotal: 300 })
+    expect(s).toContain('미매칭 300건')
+    expect(s).toContain('상위 2건 표시')
+  })
+
+  it('미매칭 총계가 표시 건수와 같으면(잘리지 않음) 잘림 표시 없이 총계만 보여준다', () => {
+    const s = formatDigest({ ...data, missedTotal: 2 })
+    expect(s).toContain('미매칭 2건')
+    expect(s).not.toContain('상위')
   })
 })

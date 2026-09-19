@@ -19,5 +19,6 @@ export async function runDigest(deps: DigestDeps, kstDate: string): Promise<void
     apiCalls,
     missedCandidates: agg.missedCandidates,
     errorCounts: agg.errorCounts,
+    missedTotal: agg.missedTotal,
   }))
 }

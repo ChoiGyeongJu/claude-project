@@ -14,6 +14,8 @@ export type DigestData = {
   apiCalls: number
   missedCandidates: MissedCandidate[]
   errorCounts: Record<string, number>
+  /** 잘리지 않은 총계. missedCandidates.length 를 실제 건수로 쓰면 심각도를 과소 표시한다. */
+  missedTotal: number
 }
 
 export function formatDigest(d: DigestData): string {
@@ -35,7 +37,9 @@ export function formatDigest(d: DigestData): string {
     `API    ${d.apiCalls} / ${DAILY_LIMIT}`,
     `에러   ${errors}`,
     '',
-    `미매칭 ${d.missedCandidates.length}건 \\(룰 튜닝 후보\\)`,
+    d.missedTotal > d.missedCandidates.length
+      ? `미매칭 ${d.missedTotal}건 \\(상위 ${d.missedCandidates.length}건 표시 · 룰 튜닝 후보\\)`
+      : `미매칭 ${d.missedTotal}건 \\(룰 튜닝 후보\\)`,
     missed,
   ].join('\n')
 }

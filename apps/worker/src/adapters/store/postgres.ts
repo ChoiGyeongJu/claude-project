@@ -203,7 +203,23 @@ export function createPostgresStore(db: Db): EventStore {
       const errorCounts: Record<string, number> = {}
       for (const r of errorRows) if (r.err) errorCounts[r.err] = r.n
 
-      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed, errorCounts }
+      // 잘리지 않은 총계를 따로 센다 — 50건 상한에 걸린 날 "50건"으로 보이면
+      // 심각도가 과소 표시되고, 운영자는 문제가 작다고 오판한다.
+      const missedTotalRows = await db.select({ n: sql<number>`count(*)::int` })
+        .from(events).where(and(
+          eq(events.verdict, 'drop'),
+          eq(events.rule, 'no-keyword-match'),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+
+      return {
+        sent,
+        dead: deadRows[0]?.n ?? 0,
+        missedCandidates: missed,
+        errorCounts,
+        missedTotal: missedTotalRows[0]?.n ?? 0,
+      }
     },
   }
 }
