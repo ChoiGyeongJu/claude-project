@@ -19,6 +19,7 @@
 - **DART 응답 필드는 9개뿐이다**: `corp_cls`, `corp_name`, `corp_code`, `stock_code`, `report_nm`, `rcept_no`, `flr_nm`, `rcept_dt`, `rm`. `pblntf_ty`는 요청 파라미터이며 **응답에 없다.** 모든 유형 판별은 `report_nm` 문자열 패턴으로 한다.
 - **API 한도**: OpenDART 일 20,000건. 초과 시 에러코드 `020`.
 - **금지 사항**: 호재/악재 판단, 목표가, 매수·매도 의견을 생성하는 코드를 작성하지 않는다. LLM 프롬프트에도 포함하지 않는다.
+- **strip-only 비호환 구문 금지**: Node 가 `.ts` 를 실행할 때 쓰는 strip-only 모드는 **파라미터 프로퍼티**(`constructor(private x: T)`), **enum**, **namespace**, **데코레이터** 를 처리하지 못하고 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 로 죽는다. vitest 는 esbuild 로 트랜스파일하므로 **테스트는 통과하지만 런타임이 죽는다** — 테스트 통과가 이 문제를 잡아주지 않는다. 이 네 가지를 쓰지 말 것.
 - **비밀값**: API 키·봇 토큰은 전부 환경변수. 코드·테스트·fixture에 하드코딩 금지.
 - **테스트**: 실제 네트워크를 호출하는 자동 테스트를 만들지 않는다. 외부 응답은 fixture로 고정한다.
 - **커밋**: 각 Task 종료 시 1커밋. 메시지는 Conventional Commits.
@@ -1695,9 +1696,15 @@ import { parseDartResponse } from '../../core/dart/schema.js'
 const ENDPOINT = 'https://opendart.fss.or.kr/api/list.json'
 
 export class DartApiError extends Error {
-  constructor(readonly status: string, message: string) {
+  // 파라미터 프로퍼티(`constructor(readonly status: ...)`)를 쓰면 안 된다.
+  // Node 의 strip-only 타입 스트리핑이 지원하지 않아 `node src/main.ts` 가
+  // ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX 로 죽는다 (실측 확인).
+  readonly status: string
+
+  constructor(status: string, message: string) {
     super(`DART ${status}: ${message}`)
     this.name = 'DartApiError'
+    this.status = status
   }
 }
 
@@ -3243,6 +3250,11 @@ main().catch((err) => {
 
 Run: `pnpm test && pnpm typecheck`
 Expected: 전부 PASS
+
+또한 **워커가 실제로 기동하는지** 확인한다 (테스트 통과가 이를 보장하지 않는다):
+
+Run: `cd apps/worker && DATABASE_URL=x DART_API_KEY=$(printf 'k%.0s' {1..40}) TELEGRAM_BOT_TOKEN=t TELEGRAM_CHAT_ID=1 LLM_API_KEY=l node src/main.ts`
+Expected: 설정 파싱과 모듈 로드를 통과해 실행에 들어간다 (DB 연결 실패로 죽는 것은 정상 — `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 나 zod 설정 오류가 **아니어야** 한다). 확인 후 Ctrl-C.
 
 - [ ] **Step 6: 커밋**
 
