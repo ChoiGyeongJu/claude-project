@@ -1,5 +1,5 @@
 import { formatEvent, formatMerged } from '../core/format.js'
-import { MERGE_THRESHOLD } from '../core/policy.js'
+import { MAX_MERGED_CHARS, MERGE_THRESHOLD } from '../core/policy.js'
 import { MAX_ATTEMPTS, nextAttemptAt } from '../core/retry.js'
 import { LOCAL_RATE_LIMIT } from '../ports/notifier.js'
 import type { Notifier } from '../ports/notifier.js'
@@ -40,11 +40,22 @@ export async function runDispatch(deps: DispatchDeps, now: Date): Promise<Dispat
     await sendOne(deps, item, formatEvent(item.event, item.tier), now, stats)
   }
 
-  // 그 외 — 임계 이상이면 한 메시지로 묶어 rate limit 압박을 줄인다
+  // 그 외 — 임계 이상이면 한 메시지로 묶어 rate limit 압박을 줄인다.
+  // 병합 메시지는 요약을 붙이지 않는다 — 개별 발송과 달리 알림에 요약이 있는지 여부가
+  // "마침 그때 몇 건이 밀려 있었는가"로 결정되는 것은 의도된 지연·길이 트레이드오프다.
   if (others.length >= MERGE_THRESHOLD) {
-    const text = formatMerged(others.map((i) => ({ event: i.event, tier: i.tier })))
+    // MAX_MERGED_CHARS를 넘기 전까지만 배치에 담는다 — 텔레그램 4096자 한도를 넘기면
+    // 배치 전체가 거부되어 안의 항목이 모두 같이 죽는다. 담기지 못한 항목은 아무 store
+    // 호출도 받지 않고 pending으로 남아 다음 사이클에 다시 claim된다 — 유실되지 않는다.
+    const batch: PendingOutbox[] = []
+    for (const item of others) {
+      const next = [...batch, item]
+      if (formatMerged(next.map((i) => ({ event: i.event, tier: i.tier }))).length > MAX_MERGED_CHARS) break
+      batch.push(item)
+    }
+    const text = formatMerged(batch.map((i) => ({ event: i.event, tier: i.tier })))
     const res = await deps.notifier.send(text)
-    for (const item of others) await applyResult(deps, item, res, now, stats)
+    for (const item of batch) await applyResult(deps, item, res, now, stats)
   } else {
     for (const item of others) {
       const summary = await deps.summarizer.summarize(item.event)
@@ -70,6 +81,11 @@ async function applyResult(
   now: Date,
   stats: DispatchStats,
 ): Promise<void> {
+  // 발송은 at-least-once다. 하나의 send() 호출이 병합 배치라면 N개 항목을 대표한다 —
+  // 텔레그램이 메시지를 실제로 받았는데 우리가 그 응답만 못 받으면, 우리는 실패로 보고
+  // N개 전부를 재시도해 중복 발송할 수 있다. 텔레그램 Bot API에는 idempotency key가
+  // 없어 이 경로를 원천적으로 없앨 수는 없다 — "확인된 성공에만 markSent" 는 의도된
+  // 선택이다: 알림 서비스에서는 중복이 누락보다 낫다.
   if (res.ok) {
     await deps.store.markSent(item.id)
     stats.sent += 1

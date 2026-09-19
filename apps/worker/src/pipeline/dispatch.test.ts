@@ -3,6 +3,7 @@ import type { NormalizedEvent } from '@app/shared'
 import type { EventStore, PendingOutbox } from '../ports/store.js'
 import type { Notifier } from '../ports/notifier.js'
 import { LOCAL_RATE_LIMIT } from '../ports/notifier.js'
+import { MAX_MERGED_CHARS } from '../core/policy.js'
 import { noopSummarizer } from '../adapters/summarizer/noop.js'
 import { runDispatch } from './dispatch.js'
 
@@ -164,4 +165,60 @@ describe('runDispatch', () => {
     expect(stats.sent).toBe(3)
     expect(markSent).toHaveBeenCalledTimes(3)
   })
+
+  it('예산 안에 다 들어가면 병합 메시지 하나에 전부 담긴다 (정상 케이스는 그대로다)', async () => {
+    const send = vi.fn<Notifier['send']>(async () => ({ ok: true as const }))
+    const items = [
+      pending({ id: 1, tier: 'high' }),
+      pending({ id: 2, tier: 'high' }),
+      pending({ id: 3, tier: 'normal' }),
+      pending({ id: 4, tier: 'normal' }),
+    ]
+    const { deps: d, markSent } = deps(items, send)
+
+    const stats = await runDispatch(d, NOW)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(String(send.mock.calls[0]![0])).toContain('공시 4건')
+    expect(stats.sent).toBe(4)
+    expect(markSent).toHaveBeenCalledTimes(4)
+  })
+
+  it(
+    '병합 메시지가 MAX_MERGED_CHARS를 넘으면 담기는 항목까지만 보내고, ' +
+      '나머지는 markSent/markFailed/markDead 어느 것도 호출되지 않는다 — ' +
+      '텔레그램 4096자 한도를 넘겨 배치 전체가 거부되는 것을 막기 위해서다. ' +
+      '담기지 못한 항목은 store를 전혀 건드리지 않아야 pending으로 남아 다음 ' +
+      '사이클에 다시 claim된다 (유실되지 않는다).',
+    async () => {
+      const send = vi.fn<Notifier['send']>(async () => ({ ok: true as const }))
+      // 제목을 크게 부풀려 몇 건만 지나도 MAX_MERGED_CHARS(3,500)를 넘도록 만든다.
+      // 사전에 formatMerged로 직접 측정해 확인한 값: 900자 제목 기준 누적 길이는
+      // 1건 979, 2건 1923, 3건 2867, 4건 3811 — 그래서 정확히 3건까지만 담겨야 한다.
+      const longTitle = 'A'.repeat(900)
+      const longEvent: NormalizedEvent = { ...event, title: longTitle }
+      const items = [1, 2, 3, 4, 5].map((id) =>
+        pending({ id, tier: 'high', event: longEvent }),
+      )
+      const { deps: d, markSent, markFailed, markDead } = deps(items, send)
+
+      const stats = await runDispatch(d, NOW)
+
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(String(send.mock.calls[0]![0]).length).toBeLessThanOrEqual(MAX_MERGED_CHARS)
+
+      expect(markSent).toHaveBeenCalledTimes(3)
+      expect(markSent).toHaveBeenCalledWith(1)
+      expect(markSent).toHaveBeenCalledWith(2)
+      expect(markSent).toHaveBeenCalledWith(3)
+      expect(markSent).not.toHaveBeenCalledWith(4)
+      expect(markSent).not.toHaveBeenCalledWith(5)
+
+      // 4, 5번은 markSent뿐 아니라 markFailed/markDead도 전혀 호출되지 않아야 한다 —
+      // 어떤 store 호출도 받지 않아야 outbox 행이 pending 그대로 남는다.
+      expect(markFailed).not.toHaveBeenCalled()
+      expect(markDead).not.toHaveBeenCalled()
+
+      expect(stats.sent).toBe(3)
+    },
+  )
 })
