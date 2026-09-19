@@ -55,6 +55,13 @@ describe('createLlmSummarizer', () => {
     expect(await s.summarize(event)).toBeNull()
   })
 
+  it('AbortSignal.timeout 에 의한 타임아웃도 null을 반환한다 — 요약 실패가 발송을 막으면 안 된다', async () => {
+    const s = summarizerWith(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    })
+    expect(await s.summarize(event)).toBeNull()
+  })
+
   it('응답 형태가 다르면 null을 반환한다', async () => {
     const s = summarizerWith(async () => ({
       ok: true,

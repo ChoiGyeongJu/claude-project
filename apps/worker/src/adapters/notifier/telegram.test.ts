@@ -61,6 +61,25 @@ describe('createTelegramNotifier', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(5)   // 6번째는 호출되지 않았다
   })
 
+  it('AbortSignal.timeout 에 의한 타임아웃은 토큰이 redact된 재시도가능한 실패로 반환한다', async () => {
+    // 레이어 1(메시지를 아예 보지 않음) 때문에 DOMException 의 message 는 애초에
+    // 출력에 반영되지 않는다 — 그래도 throw 하지 않고 정상 SendResult 로 변환되는지,
+    // 그리고 토큰이 어떤 경로로도 새지 않는지가 이 테스트의 핵심이다.
+    const fakeToken = 'timeout-test-token-abcdefgh12345678'
+    const fetchImpl = vi.fn(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    }) as unknown as typeof fetch
+    const n = createTelegramNotifier({ token: fakeToken, chatId: '-100', fetchImpl })
+
+    const r = await n.send('x')
+    expect(r.ok).toBe(false)
+    expect(JSON.stringify(r)).not.toContain(fakeToken)
+    if (!r.ok) {
+      expect(r.error).toBe('error: DOMException')
+      expect(r.retryAfterMs).toBeNull()
+    }
+  })
+
   it('fetch 실패는 재시도가능한 실패로 반환한다', async () => {
     const fakeToken = 'fake-bot-token-1234567890abcdef'
     const fetchImpl = vi.fn(async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DAILY_LIMIT, kstDateString, budgetGuard } from './budget.js'
+import { DAILY_LIMIT, kstDateString, budgetGuard, nextKstDate } from './budget.js'
 
 describe('DAILY_LIMIT', () => {
   it('OpenDART 한도는 일 20,000건이다', () => expect(DAILY_LIMIT).toBe(20_000))
@@ -11,6 +11,21 @@ describe('kstDateString', () => {
   })
   it('UTC 아침은 같은 날', () => {
     expect(kstDateString(new Date('2026-09-19T06:30:00Z'))).toBe('2026-09-19')
+  })
+})
+
+describe('nextKstDate — 밀린 다이제스트를 하루씩 따라잡는 데 쓴다', () => {
+  it('월 경계를 넘긴다', () => {
+    expect(nextKstDate('2026-01-31')).toBe('2026-02-01')
+  })
+  it('연 경계를 넘긴다', () => {
+    expect(nextKstDate('2025-12-31')).toBe('2026-01-01')
+  })
+  it('윤년의 2월 28일 다음은 29일이다', () => {
+    expect(nextKstDate('2024-02-28')).toBe('2024-02-29')
+  })
+  it('평년의 2월 28일 다음은 3월 1일이다', () => {
+    expect(nextKstDate('2026-02-28')).toBe('2026-03-01')
   })
 })
 

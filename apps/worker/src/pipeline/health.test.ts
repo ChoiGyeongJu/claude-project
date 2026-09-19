@@ -51,4 +51,14 @@ describe('createHeartbeat — VM이 통째로 죽는 경우를 잡는 유일한 
     const result = await hb.ping()
     expect(result).toBe(false)
   })
+
+  it('AbortSignal.timeout 에 의한 타임아웃도 false를 반환한다 — finally 에서 도므로 여기가 매달리면 루프 전체가 멈춘다', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    }) as unknown as typeof fetch
+    const hb = createHeartbeat({ url: 'https://hc.test/abc', fetchImpl })
+
+    const result = await hb.ping()
+    expect(result).toBe(false)
+  })
 })

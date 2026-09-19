@@ -60,6 +60,17 @@ describe('createDartSource', () => {
     await expect(src.fetchLatest(NOW)).rejects.toThrow()
   })
 
+  it('AbortSignal.timeout 에 의한 타임아웃은 예외로 전파되어 루프가 잡을 수 있다', async () => {
+    // dart.ts 에는 자체 try/catch 가 없다 — 타임아웃도 다른 네트워크 실패와 똑같이
+    // 예외로 던져져 main 루프의 catch 가 처리해야 한다. 삼켜서 빈 배열을 반환하면
+    // 미수신 이벤트가 조용히 사라진다.
+    const fetchImpl = vi.fn(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    }) as unknown as typeof fetch
+    const src = createDartSource({ apiKey: 'test-key', fetchImpl })
+    await expect(src.fetchLatest(NOW)).rejects.toMatchObject({ name: 'TimeoutError' })
+  })
+
   it('DartApiError.status 는 생성자 인자로 전달된 값을 보존한다', async () => {
     const { src } = sourceWith({ status: '020', message: '한도 초과' })
     try {

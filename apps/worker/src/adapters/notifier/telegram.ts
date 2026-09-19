@@ -16,6 +16,9 @@ const BUCKET_CAPACITY = 5
 /** 15건/분 = 4초당 토큰 1개. 토큰이 없으면 이만큼 뒤에 재시도한다. */
 const REFILL_WAIT_MS = 4_000
 
+/** fetch 는 기본 타임아웃이 없다. 없으면 발송이 매달려 루프 전체가 멈춘다. */
+const REQUEST_TIMEOUT_MS = 15_000
+
 type TelegramResponse = {
   ok: boolean
   description?: string
@@ -59,6 +62,7 @@ export function createTelegramNotifier(cfg: TelegramConfig): Notifier {
         const res = await doFetch(url, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           body: JSON.stringify({
             chat_id: cfg.chatId,
             text: markdownV2,

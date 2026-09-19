@@ -1,4 +1,7 @@
 /** ping() 은 절대 throw 하지 않는다. 반환값은 "모니터링 서비스가 확인했는가". */
+/** heartbeat 은 finally 에서 돌므로 가장 짧아야 한다. 여기가 매달리면 루프가 멈춘다. */
+const PING_TIMEOUT_MS = 5_000
+
 export type Heartbeat = { ping(): Promise<boolean> }
 
 export type HeartbeatConfig = {
@@ -16,7 +19,7 @@ export function createHeartbeat(cfg: HeartbeatConfig): Heartbeat {
     async ping(): Promise<boolean> {
       if (!cfg.url) return true // 설정하지 않은 경우는 실패가 아니다
       try {
-        const res = await doFetch(cfg.url)
+        const res = await doFetch(cfg.url, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) })
         // 상태 코드를 반드시 본다. URL 오타나 계정 만료는 4xx/5xx 로 오는데
         // 이를 성공으로 취급하면 "감시가 깨진 상태"가 영원히 보이지 않는다.
         return res.ok

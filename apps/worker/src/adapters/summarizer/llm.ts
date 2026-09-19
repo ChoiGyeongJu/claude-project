@@ -40,6 +40,9 @@ export type LlmConfig = {
 
 type LlmResponse = { content?: Array<{ type: string; text?: string }> }
 
+/** 생성은 오래 걸릴 수 있으나 무한히는 아니다. 매달리면 알림 전체가 멈춘다. */
+const REQUEST_TIMEOUT_MS = 30_000
+
 export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
   const doFetch = cfg.fetchImpl ?? fetch
 
@@ -53,6 +56,7 @@ export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
             'x-api-key': cfg.apiKey,
             'anthropic-version': '2023-06-01',
           },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           body: JSON.stringify({
             model: cfg.model,
             max_tokens: 300,
