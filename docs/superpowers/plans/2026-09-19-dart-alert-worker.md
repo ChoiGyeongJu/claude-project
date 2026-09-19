@@ -1161,7 +1161,12 @@ export type EventStore = {
 
   claimPending(now: Date, limit: number): Promise<PendingOutbox[]>
   markSent(outboxId: number): Promise<void>
-  markFailed(outboxId: number, error: string, nextAttemptAt: Date): Promise<void>
+  /**
+   * 실패를 기록한다. `attempts` 는 **호출자가 결정한 최종값**이며 스토어는 시키는 대로 쓴다.
+   * 스토어가 스스로 +1 하면 스로틀링(local-rate-limit)까지 예산을 잠식해,
+   * 자가 조절만으로 정상 알림이 dead 가 된다.
+   */
+  markFailed(outboxId: number, error: string, nextAttemptAt: Date, attempts: number): Promise<void>
   markDead(outboxId: number, error: string): Promise<void>
 
   incrementApiUsage(sourceId: string, kstDate: string): Promise<number>
@@ -1500,9 +1505,10 @@ export function createPostgresStore(db: Db): EventStore {
       await db.update(outbox).set({ status: 'sent' }).where(eq(outbox.id, id))
     },
 
-    async markFailed(id, error, nextAttemptAt) {
+    async markFailed(id, error, nextAttemptAt, attempts) {
+      // 스스로 +1 하지 않는다 — attempts 는 호출자가 결정한 값이다.
       await db.update(outbox)
-        .set({ attempts: sql`${outbox.attempts} + 1`, lastError: error, nextAttemptAt })
+        .set({ attempts, lastError: error, nextAttemptAt })
         .where(eq(outbox.id, id))
     },
 
@@ -2654,7 +2660,7 @@ async function applyResult(
     ? new Date(now.getTime() + res.retryAfterMs)
     : nextAttemptAt(item.attempts, now)
 
-  await deps.store.markFailed(item.id, res.error, next)
+  await deps.store.markFailed(item.id, res.error, next, attempts)
   stats.failed += 1
 }
 ```
