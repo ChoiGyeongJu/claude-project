@@ -22,6 +22,11 @@ type TelegramResponse = {
   parameters?: { retry_after?: number }
 }
 
+/** 에러 메시지에서 토큰을 제거하는 방어선. 레이어 2 방어. */
+function redactToken(msg: string, token: string): string {
+  return msg.replaceAll(token, '***')
+}
+
 export function createTelegramNotifier(cfg: TelegramConfig): Notifier {
   const doFetch = cfg.fetchImpl ?? fetch
   const now = cfg.now ?? (() => new Date())
@@ -55,22 +60,23 @@ export function createTelegramNotifier(cfg: TelegramConfig): Notifier {
         if (res.ok && body.ok) return { ok: true }
 
         const retryAfter = body.parameters?.retry_after
+        const errorMsg = redactToken(body.description ?? `HTTP ${res.status}`, cfg.token)
         return {
           ok: false,
           retryAfterMs: typeof retryAfter === 'number' ? retryAfter * 1_000 : null,
-          // 토큰이 담긴 url은 절대 포함하지 않는다
-          error: body.description ?? `HTTP ${res.status}`,
+          error: errorMsg,
         }
       } catch (e) {
         // fetch나 json() 실패는 재시도가능한 오류로 취급한다.
-        // 토큰이 에러 메시지에 나타나지 않도록 유형별 안전한 메시지를 사용한다.
+        // 레이어 1: 에러 메시지를 전혀 보지 않고 유형만 사용한다.
+        // 레이어 2: 모든 반환값을 토큰으로 redact한다.
         const errorMsg = e instanceof TypeError
-          ? `network error: ${e.message.split('\n')[0]}`
+          ? 'network error'
           : `error: ${e instanceof Error ? e.constructor.name : 'unknown'}`
         return {
           ok: false,
           retryAfterMs: null,
-          error: errorMsg,
+          error: redactToken(errorMsg, cfg.token),
         }
       }
     },

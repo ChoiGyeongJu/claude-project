@@ -92,4 +92,63 @@ describe('createTelegramNotifier', () => {
     expect(r).toMatchObject({ ok: false, retryAfterMs: null })
     expect(JSON.stringify(r)).not.toContain(fakeToken)
   })
+
+  it('fetch 에러 메시지가 토큰을 포함해도 제거한다 (레이어 2 방어)', async () => {
+    const fakeToken = 'super-secret-bot-token-abcd1234efgh5678'
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError(
+        `fetch failed for https://api.telegram.org/bot${fakeToken}/sendMessage: connection refused`
+      )
+    }) as unknown as typeof fetch
+    const n = createTelegramNotifier({
+      token: fakeToken, chatId: '-100', fetchImpl,
+    })
+
+    const r = await n.send('x')
+    expect(r).toMatchObject({ ok: false, retryAfterMs: null })
+    expect(JSON.stringify(r)).not.toContain(fakeToken)
+    if (!r.ok) {
+      expect(r.error).not.toContain('connection refused')
+      expect(r.error).toBe('network error')
+    }
+  })
+
+  it('fetch 에러 메시지가 전체 URL을 포함해도 제거한다', async () => {
+    const fakeToken = 'ultra-secret-token-xyz9876uvwx4321pqr'
+    const fullUrl = `https://api.telegram.org/bot${fakeToken}/sendMessage`
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError(`Failed to fetch ${fullUrl}`)
+    }) as unknown as typeof fetch
+    const n = createTelegramNotifier({
+      token: fakeToken, chatId: '-100', fetchImpl,
+    })
+
+    const r = await n.send('x')
+    expect(JSON.stringify(r)).not.toContain(fakeToken)
+    expect(JSON.stringify(r)).not.toContain(fullUrl)
+    if (!r.ok) {
+      expect(r.error).toBe('network error')
+    }
+  })
+
+  it('Telegram 실패 응답이 토큰을 포함하면 제거한다', async () => {
+    const fakeToken = 'redact-test-token-ijkl0123mnop4567'
+    const fetchImpl = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        ok: false,
+        description: `Invalid bot token: ${fakeToken}`,
+      }),
+    })) as unknown as typeof fetch
+    const n = createTelegramNotifier({
+      token: fakeToken, chatId: '-100', fetchImpl,
+    })
+
+    const r = await n.send('x')
+    expect(JSON.stringify(r)).not.toContain(fakeToken)
+    if (!r.ok) {
+      expect(r.error).toBe('Invalid bot token: ***')
+    }
+  })
 })
