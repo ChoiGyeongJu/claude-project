@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { LOCAL_RATE_LIMIT } from '../../ports/notifier.js'
 import { createTelegramNotifier } from './telegram.js'
 
 function notifierWith(body: unknown, httpOk = true, httpStatus = 200) {
@@ -55,8 +56,40 @@ describe('createTelegramNotifier', () => {
     for (let i = 0; i < 5; i += 1) expect((await n.send('x')).ok).toBe(true)
 
     expect(await n.send('x')).toMatchObject({
-      ok: false, retryAfterMs: 4_000, error: 'local-rate-limit',
+      ok: false, retryAfterMs: 4_000, error: LOCAL_RATE_LIMIT,
     })
     expect(fetchImpl).toHaveBeenCalledTimes(5)   // 6번째는 호출되지 않았다
+  })
+
+  it('fetch 실패는 재시도가능한 실패로 반환한다', async () => {
+    const fakeToken = 'fake-bot-token-1234567890abcdef'
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError('fetch failed: ECONNREFUSED')
+    }) as unknown as typeof fetch
+    const n = createTelegramNotifier({
+      token: fakeToken, chatId: '-100', fetchImpl,
+    })
+
+    const r = await n.send('x')
+    expect(r).toMatchObject({ ok: false, retryAfterMs: null })
+    expect(JSON.stringify(r)).not.toContain(fakeToken)
+  })
+
+  it('res.json() 실패는 재시도가능한 실패로 반환한다', async () => {
+    const fakeToken = 'fake-bot-token-1234567890abcdef'
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token')
+      },
+    })) as unknown as typeof fetch
+    const n = createTelegramNotifier({
+      token: fakeToken, chatId: '-100', fetchImpl,
+    })
+
+    const r = await n.send('x')
+    expect(r).toMatchObject({ ok: false, retryAfterMs: null })
+    expect(JSON.stringify(r)).not.toContain(fakeToken)
   })
 })
