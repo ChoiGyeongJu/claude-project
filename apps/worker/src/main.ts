@@ -54,10 +54,6 @@ async function main(): Promise<void> {
         lastDigestDate = kstDate
       }
 
-      // heartbeat 이 확인되지 않으면(URL 오타·계정 만료 포함) 연속 실패를 센다.
-      // 이 값이 0이 아니면 감시망이 뚫린 것이므로 다이제스트에 반드시 드러나야 한다.
-      heartbeatFailures = (await heartbeat.ping()) ? 0 : heartbeatFailures + 1
-
       const base = budgetGuard(used, pollIntervalMs(now))
       await sleep(base)
     } catch (err) {
@@ -76,6 +72,14 @@ async function main(): Promise<void> {
       }
 
       await sleep(pollIntervalMs(new Date()) * circuit.intervalMultiplier())
+    } finally {
+      // heartbeat 은 반드시 finally 에 둔다. "프로세스가 살아 루프를 돌고 있는가"에
+      // 답하는 신호이고, 그 답은 DART 성공 여부와 무관하기 때문이다.
+      // try 안에 두면 DART 장애 중 워커가 멀쩡히 백오프하는 동안에도 핑이 끊겨
+      // 외부 감시가 "VM 사망"으로 오판하고, 사람이 고칠 수 없고 저절로 낫는 일로
+      // 운영자를 호출하게 된다. DART 실패는 서킷 브레이커 알림이 담당한다.
+      // ping() 은 절대 throw 하지 않으므로 finally 에서 안전하다.
+      heartbeatFailures = (await heartbeat.ping()) ? 0 : heartbeatFailures + 1
     }
   }
 }
