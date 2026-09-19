@@ -96,3 +96,47 @@ export async function runCycle(
 
   return { sleepMs, lastDigestDate, heartbeatFailures }
 }
+
+export type Sleeper = {
+  sleep(ms: number): Promise<void>
+  wakeNow(): void
+}
+
+/**
+ * 중단 가능한 sleep. 종료 신호가 오면 즉시 깨운다.
+ * 평범한 setTimeout 이면 주말 sleep(최대 5분)이나 서킷 백오프(최대 80초) 중에
+ * SIGTERM 이 와도 그게 끝나야 루프 조건을 다시 보는데, Docker 기본 유예는 10초라
+ * 그전에 SIGKILL 이 떨어진다 — 핸들러가 있으나 마나가 된다.
+ */
+export function createSleeper(): Sleeper {
+  let wake: (() => void) | null = null
+  return {
+    sleep: (ms: number) =>
+      new Promise<void>((resolve) => {
+        const t = setTimeout(() => { wake = null; resolve() }, ms)
+        wake = () => { clearTimeout(t); wake = null; resolve() }
+      }),
+    wakeNow: () => wake?.(),
+  }
+}
+
+export type LoopControl = { shouldStop(): boolean }
+
+/**
+ * main.ts 는 모듈 로드 시점에 바로 실행되므로 이 while 루프 자체도 여기로
+ * 옮겨 테스트 가능하게 한다. 동작은 main.ts 에 인라인으로 있던 것과 동일하다:
+ * 사이클을 돌리고, 반환된 sleepMs 만큼 중단 가능한 sleep 을 하고, shouldStop()
+ * 이 참이 되면(SIGTERM/SIGINT) 대기 중이던 sleep 이 즉시 풀리며 다음 사이클
+ * 없이 빠져나간다.
+ */
+export async function runLoop(
+  deps: CycleDeps, initialState: CycleState, sleeper: Sleeper, control: LoopControl,
+): Promise<CycleState> {
+  let state = initialState
+  while (!control.shouldStop()) {
+    const result = await runCycle(deps, state, new Date())
+    state = { lastDigestDate: result.lastDigestDate, heartbeatFailures: result.heartbeatFailures }
+    await sleeper.sleep(result.sleepMs)
+  }
+  return state
+}

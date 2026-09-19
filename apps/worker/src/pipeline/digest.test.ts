@@ -60,4 +60,21 @@ describe('catchUpDigests — 장애가 자정을 두 번 넘겨도 중간 날을
     expect(next).toBe('2026-02-02')
     expect(digestFor.mock.calls.map((c) => c[0])).toEqual(['2026-01-30', '2026-01-31', '2026-02-01'])
   })
+
+  it(
+    'lastDigestDate 가 currentKstDate 보다 앞서면(시계 스큐·오래된 상태) 아무것도 보내지 않고 즉시 끝난다',
+    async () => {
+      // 회귀 테스트: `!==` 비교였다면 이 조건은 영원히 거짓이 되지 않아 무한 루프에
+      // 빠진다 — 다이제스트를 영원히 발송한다. 짧은 타임아웃을 걸어, 회귀가 나면
+      // 이 테스트가 행(hang) 대신 실패로 끝나게 한다.
+      const digestFor = vi.fn<EventStore['digestFor']>(async () => emptyAgg)
+      const send = vi.fn(async () => ({ ok: true }) as const)
+      const next = await catchUpDigests(deps(digestFor, send), '2026-09-20', '2026-09-19')
+
+      expect(next).toBe('2026-09-20') // 원래 값 그대로 — 억지로 오늘 날짜로 되돌리지 않는다
+      expect(digestFor).not.toHaveBeenCalled()
+      expect(send).not.toHaveBeenCalled()
+    },
+    1_000,
+  )
 })

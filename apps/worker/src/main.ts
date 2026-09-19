@@ -9,11 +9,9 @@ import { createPostgresStore, type Db } from './adapters/store/postgres.js'
 import { createTelegramNotifier } from './adapters/notifier/telegram.js'
 import { createLlmSummarizer } from './adapters/summarizer/llm.js'
 import { createHeartbeat } from './pipeline/health.js'
-import { runCycle } from './pipeline/cycle.js'
+import { runLoop, createSleeper } from './pipeline/cycle.js'
 
 const log = pino({ level: process.env.LOG_LEVEL ?? 'info' })
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 async function main(): Promise<void> {
   const cfg = loadConfig(process.env)
@@ -27,31 +25,30 @@ async function main(): Promise<void> {
   const heartbeat = createHeartbeat({ url: cfg.heartbeatUrl })
   const circuit = createCircuit()
 
-  let lastDigestDate = kstDateString(new Date())
-  let heartbeatFailures = 0
   let shuttingDown = false
+  const sleeper = createSleeper()
 
   // Docker stop·호스트 재부팅은 SIGTERM 으로 온다. 핸들러가 없으면 발송 직후
   // markSent 직전에 죽어 재시작 시 중복 알림이 나간다 — 매 재배포마다 발생한다.
+  // sleep 이 중단 불가능하면 주말 sleep(5분)이나 서킷 백오프(80초) 중에 신호가
+  // 와도 그게 끝나야 루프 조건을 다시 보는데, Docker 기본 유예(10초)가 먼저
+  // 끝나 SIGKILL 이 떨어진다 — wakeNow() 로 대기 중이면 즉시 깨운다.
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     process.on(sig, () => {
       if (shuttingDown) process.exit(1) // 두 번째 신호는 즉시 종료
       shuttingDown = true
       log.info({ sig }, 'shutdown requested — finishing current cycle')
+      sleeper.wakeNow()
     })
   }
   log.info('worker started')
 
-  while (!shuttingDown) {
-    const result = await runCycle(
-      { source, store, notifier, summarizer, heartbeat, circuit, log },
-      { lastDigestDate, heartbeatFailures },
-      new Date(),
-    )
-    lastDigestDate = result.lastDigestDate
-    heartbeatFailures = result.heartbeatFailures
-    await sleep(result.sleepMs)
-  }
+  await runLoop(
+    { source, store, notifier, summarizer, heartbeat, circuit, log },
+    { lastDigestDate: kstDateString(new Date()), heartbeatFailures: 0 },
+    sleeper,
+    { shouldStop: () => shuttingDown },
+  )
 
   log.info('shutdown complete')
   process.exit(0)
