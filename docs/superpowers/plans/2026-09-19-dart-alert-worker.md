@@ -2288,12 +2288,25 @@ import type { Summarizer } from '../../ports/summarizer.js'
  * 사실 요약과 수치 추출만 수행한다.
  */
 export const SUMMARY_SYSTEM_PROMPT = [
-  '너는 한국 기업 공시를 요약하는 도구다.',
-  '공시에 적힌 사실만 2~3줄로 요약하라.',
-  '금액, 비율, 지분율, 기간 같은 수치가 있으면 반드시 포함하라.',
-  '공시에 없는 내용을 추측하거나 덧붙이지 마라.',
+  '너는 한국 기업 공시 제목을 일반 투자자가 이해할 수 있게 풀어 쓰는 도구다.',
+  '입력으로는 회사명과 공시 제목만 주어진다. 공시 본문은 주어지지 않는다.',
+  '공시 제목이 어떤 종류의 사건을 뜻하는지 한 문장으로 설명하라.',
+  '금액, 비율, 지분율 같은 수치는 제목에 실제로 있을 때만 포함하라.',
+  '제목에 없는 내용을 추측하거나 지어내지 마라.',
   '평가, 전망, 권유에 해당하는 표현을 쓰지 마라.',
 ].join('\n')
+
+/**
+ * 출력측 방어선. 모델은 시스템 프롬프트를 무시할 수 있으므로 반환 텍스트도 검사한다.
+ * 규제 경계(유사투자자문)는 프롬프트 지시 하나에 맡기기에는 위험이 크다.
+ */
+const FORBIDDEN_IN_OUTPUT: readonly string[] = [
+  '호재', '악재', '목표가', '적정주가', '매수', '매도', '투자의견', '상승 여력', '하락 여력',
+]
+
+export function violatesBoundary(text: string): boolean {
+  return FORBIDDEN_IN_OUTPUT.some((w) => text.includes(w))
+}
 
 export type LlmConfig = {
   apiKey: string
@@ -2331,8 +2344,13 @@ export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
         if (!res.ok) return null
 
         const body = (await res.json()) as LlmResponse
-        const text = body.content?.find((c) => c.type === 'text')?.text
-        return text?.trim() || null
+        const text = body.content?.find((c) => c.type === 'text')?.text?.trim()
+        if (!text) return null
+
+        // 규제 경계를 넘은 출력은 버린다. 요약 없이 알림만 나가는 편이 안전하다.
+        if (violatesBoundary(text)) return null
+
+        return text
       } catch {
         return null   // 요약 실패가 발송을 막아서는 안 된다
       }
@@ -3410,6 +3428,29 @@ pnpm typecheck
 git add -A
 git commit -m "feat: Docker 이미지와 OCI 배포 문서"
 ```
+
+---
+
+---
+
+### Task 18: DART 문서 본문 조회 어댑터
+
+**왜 이 태스크가 뒤늦게 추가되었나:** 스펙 §7.3 은 `high`/`normal` 공시의 **본문**을 별도 문서 API로 조회해 요약·정량추출·비율계산을 하라고 요구한다. 그런데 Task 1~17 어디에도 본문 조회가 없어, LLM 이 공시 **제목만** 보고 요약하는 상태로 끝난다. 그 결과 스펙이 내세운 차별화("계약금액 500억 = 연매출의 23%")가 원천적으로 불가능하다. 계획 작성 시의 누락이며 Task 12 리뷰에서 발견되었다.
+
+**Files:**
+- Create: `apps/worker/src/ports/document.ts`
+- Create: `apps/worker/src/adapters/document/dart-document.ts`
+- Modify: `apps/worker/src/adapters/summarizer/llm.ts` (본문을 받도록 user 메시지 확장, 프롬프트 원복)
+- Test: `apps/worker/src/adapters/document/dart-document.test.ts`
+
+**핵심 난점:** OpenDART 의 `document.json` 엔드포인트는 **ZIP 바이너리**를 반환하고 그 안에 XML 이 들어 있다. 압축 해제 + XML 파싱 + 본문 텍스트 추출이 필요하다. 의존성을 하나 추가해야 하며(예: `fflate`), 추가 API 호출이 일 수십 건 발생하므로 예산 가드에 반영해야 한다.
+
+**선행 확인 (실측 필수, 추정 금지):**
+- `document.json` 의 실제 응답 형식과 ZIP 내부 구조
+- 본문 XML 에서 의미 있는 텍스트를 뽑는 방법 (공시 유형마다 구조가 다름)
+- 이 호출이 일 20,000 건 예산에 미치는 영향
+
+**완료 조건:** `high`/`normal` 공시에 대해 본문 기반 요약이 생성되고, 제목만 있을 때와 결과가 눈에 띄게 다름을 실제 공시로 확인한다. 확인 전까지 Task 12 의 제목 기반 프롬프트를 유지한다.
 
 ---
 
