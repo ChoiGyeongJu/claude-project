@@ -3309,7 +3309,23 @@ import { createHeartbeat } from './pipeline/health.js'
 
 const log = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+/**
+ * 중단 가능한 sleep. 종료 신호가 오면 즉시 깨운다.
+ * 평범한 setTimeout 이면 주말 sleep(최대 5분)이나 서킷 백오프(최대 80초) 중에
+ * SIGTERM 이 와도 그게 끝나야 루프 조건을 다시 보는데, Docker 기본 유예는 10초라
+ * 그전에 SIGKILL 이 떨어진다 — 핸들러가 있으나 마나가 된다.
+ */
+function createSleeper() {
+  let wake: (() => void) | null = null
+  return {
+    sleep: (ms: number) =>
+      new Promise<void>((resolve) => {
+        const t = setTimeout(() => { wake = null; resolve() }, ms)
+        wake = () => { clearTimeout(t); wake = null; resolve() }
+      }),
+    wakeNow: () => wake?.(),
+  }
+}
 
 async function main(): Promise<void> {
   const cfg = loadConfig(process.env)
@@ -3326,6 +3342,7 @@ async function main(): Promise<void> {
   let lastDigestDate = kstDateString(new Date())
   let heartbeatFailures = 0
   let shuttingDown = false
+  const sleeper = createSleeper()
 
   // Docker stop·호스트 재부팅은 SIGTERM 으로 온다. 핸들러가 없으면 발송 직후
   // markSent 직전에 죽어 재시작 시 중복 알림이 나간다 — 매 재배포마다 발생한다.
@@ -3334,6 +3351,7 @@ async function main(): Promise<void> {
       if (shuttingDown) process.exit(1) // 두 번째 신호는 즉시 종료
       shuttingDown = true
       log.info({ sig }, 'shutdown requested — finishing current cycle')
+      sleeper.wakeNow() // 대기 중이면 즉시 깨워 유예 시간 안에 빠져나간다
     })
   }
   log.info('worker started')
@@ -3355,13 +3373,16 @@ async function main(): Promise<void> {
       // 자정이 지나면 밀린 날짜를 하루씩 모두 보낸다. `= kstDate` 로 건너뛰면
       // 장애가 자정을 두 번 넘겼을 때 중간 날의 다이제스트가 영영 사라진다 —
       // 다이제스트는 운영자의 유일한 사후 감사 기록이므로 누락되면 안 된다.
-      while (lastDigestDate !== kstDate) {
+      // `!==` 로 두면 안 된다: 시계 스큐나 오래된 상태로 재시작해 lastDigestDate 가
+      // 현재보다 앞서 있으면 조건이 영원히 거짓이 되지 않아 다이제스트를 무한 발송한다.
+      // ISO 날짜 문자열은 사전순 비교가 날짜 순서와 일치한다.
+      while (lastDigestDate < kstDate) {
         await runDigest({ store, notifier, sourceId: source.id }, lastDigestDate)
         lastDigestDate = nextKstDate(lastDigestDate)
       }
 
       const base = budgetGuard(used, pollIntervalMs(now))
-      await sleep(base)
+      await sleeper.sleep(base)
     } catch (err) {
       circuit.recordFailure()
       const failures = circuit.consecutiveFailures()
@@ -3377,7 +3398,7 @@ async function main(): Promise<void> {
         ).catch(() => {})
       }
 
-      await sleep(pollIntervalMs(new Date()) * circuit.intervalMultiplier())
+      await sleeper.sleep(pollIntervalMs(new Date()) * circuit.intervalMultiplier())
     } finally {
       // heartbeat 은 반드시 finally 에 둔다. "프로세스가 살아 루프를 돌고 있는가"에
       // 답하는 신호이고, 그 답은 DART 성공 여부와 무관하기 때문이다.
