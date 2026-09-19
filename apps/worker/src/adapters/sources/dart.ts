@@ -6,9 +6,12 @@ import { parseDartResponse } from '../../core/dart/schema.js'
 const ENDPOINT = 'https://opendart.fss.or.kr/api/list.json'
 
 export class DartApiError extends Error {
-  constructor(readonly status: string, message: string) {
+  readonly status: string
+
+  constructor(status: string, message: string) {
     super(`DART ${status}: ${message}`)
     this.name = 'DartApiError'
+    this.status = status
   }
 }
 

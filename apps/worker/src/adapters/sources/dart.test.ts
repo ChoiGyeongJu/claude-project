@@ -59,4 +59,15 @@ describe('createDartSource', () => {
     const { src } = sourceWith({}, false)
     await expect(src.fetchLatest(NOW)).rejects.toThrow()
   })
+
+  it('DartApiError.status 는 생성자 인자로 전달된 값을 보존한다', async () => {
+    const { src } = sourceWith({ status: '020', message: '한도 초과' })
+    try {
+      await src.fetchLatest(NOW)
+      throw new Error('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(DartApiError)
+      expect((err as DartApiError).status).toBe('020')
+    }
+  })
 })
