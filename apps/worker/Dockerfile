@@ -1,7 +1,7 @@
 FROM node:24-slim AS build
 WORKDIR /app
 RUN corepack enable
-COPY pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/worker/package.json apps/worker/
 RUN pnpm install --frozen-lockfile
@@ -12,7 +12,6 @@ RUN pnpm --filter @app/worker exec tsc -p tsconfig.json
 FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist

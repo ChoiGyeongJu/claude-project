@@ -13,7 +13,41 @@
   - ARM(Ampere A1)은 용량 부족이 상습적이므로 기다리지 않는다. 나중에 잡히면 이전한다.
 - 인바운드 포트: **SSH(22)만 연다.** 워커는 전부 아웃바운드라 다른 포트가 필요 없다.
 
-## 3. Docker 설치와 실행
+## 3. 데이터베이스 준비 (Supabase)
+
+1. Supabase 프로젝트를 **서울 리전(ap-northeast-2)**으로 생성한다. 국외이전 이슈를
+   피하고 DART/텔레그램 호출과의 왕복 지연도 줄어든다.
+2. 프로젝트의 Database 설정에서 연결 문자열을 받아 `DATABASE_URL`로 쓴다.
+3. **마이그레이션을 먼저 적용한다 — 컨테이너를 처음 띄우기 전에, 반드시.** 워커는
+   시작할 때 스키마를 자동 생성하지 않는다. 저장소(레포)가 있는 아무 머신에서나
+   (배포 대상 VM일 필요 없다) 아래를 실행한다:
+
+   ```bash
+   DATABASE_URL="<supabase 연결 문자열>" \
+     pnpm --filter @app/worker exec drizzle-kit migrate
+   ```
+
+   `apps/worker/drizzle/0000_*.sql`이 적용되어 `events`, `outbox`, `api_usage` 테이블이
+   생긴다. 이걸 건너뛰면 컨테이너는 정상적으로 뜨지만 첫 사이클에서 바로
+   `relation "events" does not exist` 류의 DB 에러로 실패한다.
+
+## 4. 환경 변수 (`worker.env`)
+
+`docker run --env-file`로 넘길 파일에 아래 키를 모두 채운다. 하나라도 빠지거나
+형식이 안 맞으면 워커는 시작 직후 설정 검증에서 죽는다(정상 동작 — crash-only 설계).
+
+| 키 | 설명 |
+|---|---|
+| `DATABASE_URL` | 3번에서 마이그레이션에 쓴 것과 **동일한** Supabase 연결 문자열 |
+| `DART_API_KEY` | OpenDART 인증키. **정확히 40자여야 한다** — 스키마가 길이를 강제하며, 아니면 워커가 시작하자마자 알아보기 힘든 검증 에러를 내고 죽는다 |
+| `TELEGRAM_BOT_TOKEN` | @BotFather에서 발급한 봇 토큰 |
+| `TELEGRAM_CHAT_ID` | 알림을 보낼 채널/챗의 ID |
+| `LLM_API_KEY` | 요약에 쓰는 LLM API 키 |
+| `HEARTBEAT_URL` | 선택 항목 — 6번 참고 |
+
+(`LLM_MODEL`, `LLM_ENDPOINT`는 기본값이 있어 생략 가능하다. 바꿀 때만 채운다.)
+
+## 5. Docker 설치와 실행
 
 ```bash
 sudo apt-get update && sudo apt-get install -y docker.io
@@ -35,15 +69,35 @@ docker run -d --name dart-worker \
 `markSent` 처리 전에 죽어 재시작 시 같은 알림이 중복 발송될 수 있다. Docker Compose를
 쓴다면 동일한 이유로 서비스에 `stop_grace_period: 45s`를 넣는다.
 
-## 4. 외부 감시 (필수)
+## 6. 외부 감시 (시작에는 선택, 무인 운영에는 필수)
+
+`HEARTBEAT_URL`은 설정 스키마상 선택 값이라 없어도 워커는 정상적으로 시작한다.
+하지만 이 배포는 **운영자가 실시간으로 대응할 수 없다는 전제**로 하는 것이므로,
+하트비트 없이는 프로세스가 조용히 죽거나(OOM, VM 회수 등) 멈춰도 아무도 모른 채
+방치된다. 실제 운영에서는 사실상 필수로 취급한다.
 
 Healthchecks.io 류에서 ping URL을 발급받아 `HEARTBEAT_URL`에 넣는다.
 **반드시 OCI 외부 서비스여야 한다** — 같은 VM에 두면 VM이 죽을 때 감시도 같이 죽는다.
 
 주기는 폴링 주기보다 넉넉히 잡는다 (예: grace period 10분).
 
-## 5. 로그 확인
+## 7. 로그 확인
 
 ```bash
 docker logs -f --tail 100 dart-worker
 ```
+
+## 8. 컨테이너는 떠 있는데 알림이 안 올 때
+
+1. **로그에서 `cycle failed`를 찾는다.**
+   ```bash
+   docker logs --tail 200 dart-worker | grep "cycle failed"
+   ```
+   `relation ... does not exist` 류가 보이면 3번의 마이그레이션이 적용되지 않은 것이다.
+2. **마이그레이션이 실제로 적용됐는지 Supabase 테이블 목록에서 `events`, `outbox`,
+   `api_usage`가 보이는지로 확인한다.**
+3. **텔레그램 봇이 채널의 관리자(admin)로 추가돼 있는지 확인한다.** 봇을 멤버로만
+   추가하면 발송이 조용히 실패한다.
+4. **장 시간 외에는 조용한 것이 정상일 수 있다.** 폴링 주기는 평일 장중(KST
+   08:00–18:59) 2.5초, 그 외 평일 30초, 주말 5분으로 설계돼 있다 — 장 마감 후나
+   주말에 알림이 뜸한 것은 버그가 아니다.
