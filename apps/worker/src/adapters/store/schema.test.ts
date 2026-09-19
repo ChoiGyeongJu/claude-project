@@ -14,6 +14,16 @@ describe('events 테이블', () => {
     const rule = cfg.columns.find((c) => c.name === 'rule')
     expect(rule?.notNull).toBe(true)
   })
+
+  it(
+    'first_seen_at 인덱스를 가진다 — 다이제스트의 집계 5개가 전부 이 컬럼으로 하루를 ' +
+      '자르고, lastEventKstDate 가 기동마다 최대값을 찾는다',
+    () => {
+      const cfg = getTableConfig(events)
+      const cols = cfg.indexes.map((i) => i.config.columns.map((c) => 'name' in c ? c.name : ''))
+      expect(cols).toContainEqual(['first_seen_at'])
+    },
+  )
 })
 
 describe('outbox 테이블', () => {
@@ -21,6 +31,16 @@ describe('outbox 테이블', () => {
     const cfg = getTableConfig(outbox)
     expect(cfg.columns.map((c) => c.name)).toContain('expires_at')
   })
+
+  it(
+    '(status, next_attempt_at) 인덱스를 가진다 — claimPending 이 매 사이클 돌기 때문에 ' +
+      '인덱스가 없으면 sent/dead 가 쌓일수록 순차 스캔 비용이 2.5초 주기에 그대로 얹힌다',
+    () => {
+      const cfg = getTableConfig(outbox)
+      const cols = cfg.indexes.map((i) => i.config.columns.map((c) => 'name' in c ? c.name : ''))
+      expect(cols).toContainEqual(['status', 'next_attempt_at'])
+    },
+  )
 })
 
 describe('api_usage 테이블', () => {

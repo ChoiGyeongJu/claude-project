@@ -41,8 +41,9 @@
 | `DATABASE_URL` | 3번에서 마이그레이션에 쓴 것과 **동일한** Supabase 연결 문자열 |
 | `DART_API_KEY` | OpenDART 인증키. **정확히 40자여야 한다** — 스키마가 길이를 강제하며, 아니면 워커가 시작하자마자 알아보기 힘든 검증 에러를 내고 죽는다 |
 | `TELEGRAM_BOT_TOKEN` | @BotFather에서 발급한 봇 토큰 |
-| `TELEGRAM_CHAT_ID` | 알림을 보낼 채널/챗의 ID |
-| `LLM_API_KEY` | 요약에 쓰는 LLM API 키 |
+| `TELEGRAM_CHAT_ID` | 공시 알림을 보낼 구독자 채널/챗의 ID |
+| `TELEGRAM_OPERATOR_CHAT_ID` | 선택 항목. 설정하면 **일일 다이제스트와 연속 실패 알림만** 이 채널로 간다. 없으면 둘 다 위의 구독자 채널로 간다 — 비공개 단계에서는 구독자가 운영자뿐이라 무방하지만, **공개 전환 전에 반드시 설정해야 한다**. 다이제스트에는 버려진 공시 목록과 내부 카운터가 그대로 들어간다 |
+| `LLM_API_KEY` | 요약에 쓰는 LLM API 키. 현재 요약은 꺼져 있지만(본문 조회가 붙는 Task 18까지) 설정 스키마상 **여전히 필수**다 |
 | `HEARTBEAT_URL` | 선택 항목 — 6번 참고 |
 
 (`LLM_MODEL`, `LLM_ENDPOINT`는 기본값이 있어 생략 가능하다. 바꿀 때만 채운다.)

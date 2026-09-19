@@ -25,7 +25,16 @@ export type CycleLogger = {
 export type CycleDeps = {
   source: EventSource
   store: EventStore
+  /** 구독자용 채널. 공시 알림만 나간다. */
   notifier: Notifier
+  /**
+   * 운영자용 채널. 다이제스트와 연속 실패 알림이 나간다.
+   * TELEGRAM_OPERATOR_CHAT_ID 가 없으면 main.ts 가 notifier 와 같은 것을 넣는다.
+   *
+   * 나누지 않으면 "⚠️ 워커 연속 실패 N회" 와 버려진 공시 목록·내부 카운터가
+   * 공개 채널로 그대로 방송된다 — 공개 전환 당일에 터진다.
+   */
+  operatorNotifier: Notifier
   summarizer: Summarizer
   heartbeat: Heartbeat
   circuit: Circuit
@@ -84,7 +93,7 @@ export async function runCycle(
     // 장애가 자정을 두 번 넘겼을 때 중간 날의 다이제스트가 영영 사라진다 —
     // 다이제스트는 운영자의 유일한 사후 감사 기록이므로 누락되면 안 된다.
     lastDigestDate = await catchUpDigests(
-      { store: deps.store, notifier: deps.notifier, sourceId: deps.source.id },
+      { store: deps.store, notifier: deps.operatorNotifier, sourceId: deps.source.id },
       lastDigestDate,
       kstDate,
     )
@@ -99,7 +108,7 @@ export async function runCycle(
     // 5회째의 단 한 번뿐인 발송이 조용히 실패하고 failures 는 6,7,8... 로 올라가
     // 다시 5가 되지 않으므로 장애 전 구간에 알림이 0건 간다.
     if (failures >= ALERT_THRESHOLD && failures % ALERT_THRESHOLD === 0) {
-      await deps.notifier.send(
+      await deps.operatorNotifier.send(
         `⚠️ 워커 연속 실패 ${failures}회` +
         (heartbeatFailures > 0 ? `\n⚠️ heartbeat 미확인 ${heartbeatFailures}회 — 감시망 점검 필요` : ''),
       ).catch(() => {})

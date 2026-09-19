@@ -9,11 +9,12 @@ export type DigestDeps = {
   sourceId: string
 }
 
-export async function runDigest(deps: DigestDeps, kstDate: string): Promise<void> {
+/** 발송에 성공했는지 반환한다. 결과를 버리면 실패를 알 방법이 없다. */
+export async function runDigest(deps: DigestDeps, kstDate: string): Promise<boolean> {
   const agg = await deps.store.digestFor(kstDate)
   const apiCalls = await deps.store.getApiUsage(deps.sourceId, kstDate)
 
-  await deps.notifier.send(formatDigest({
+  const res = await deps.notifier.send(formatDigest({
     kstDate,
     sent: agg.sent,
     dead: agg.dead,
@@ -22,6 +23,8 @@ export async function runDigest(deps: DigestDeps, kstDate: string): Promise<void
     errorCounts: agg.errorCounts,
     missedTotal: agg.missedTotal,
   }))
+
+  return res.ok
 }
 
 /**
@@ -41,7 +44,11 @@ export async function catchUpDigests(
 ): Promise<string> {
   let date = lastDigestDate
   while (date < currentKstDate) {
-    await runDigest(deps, date)
+    // 발송 결과를 확인하지 않고 날짜를 전진시키면, 한도 초과·429·네트워크 오류로
+    // 거부된 다이제스트가 조용히 사라진다. 그날의 기록은 두 번 다시 나오지 않는다.
+    // 실패하면 날짜를 그대로 두고 빠져나가 다음 사이클이 같은 날짜를 재시도한다
+    // (자체 레이트 리밋에 걸린 경우도 여기로 온다 — 다음 사이클에 자연히 풀린다).
+    if (!(await runDigest(deps, date))) return date
     date = nextKstDate(date)
   }
   return date

@@ -4,7 +4,8 @@ import type { Tier } from '@app/shared'
 export const MERGE_THRESHOLD = 3
 
 /**
- * 병합 메시지 하나가 넘을 수 없는 문자 수. 텔레그램 sendMessage 본문 한도는 4096자이고,
+ * 텔레그램에 한 통으로 보내는 메시지가 넘을 수 없는 문자 수.
+ * 병합 발송과 일일 다이제스트가 같이 쓴다. 텔레그램 sendMessage 본문 한도는 4096자이고,
  * 넘으면 배치 전체가 거부되어 안에 묶인 항목이 전부 같이 죽는다.
  *
  * 3,500은 4096에서 여유를 둔 값이다 — 오늘의 CLAIM_LIMIT(20)·요약 없음 조합에서는

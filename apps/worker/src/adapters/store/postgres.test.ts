@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { getTableName, is, Param, SQL, StringChunk } from 'drizzle-orm'
 import type { NormalizedEvent } from '@app/shared'
 import { createPostgresStore, type Db } from './postgres.js'
-import { outbox } from './schema.js'
+import { events, outbox } from './schema.js'
 
 const event: NormalizedEvent = {
   sourceId: 'dart',
@@ -90,6 +90,8 @@ describe('recordEvent', () => {
  */
 function fakeSelectDb(rows: unknown[]) {
   const orderByCalls: unknown[][] = []
+  // claimPending 이 잘못된 tier 행을 dead-letter 처리하므로 update 경로도 필요하다.
+  const updates: { id: unknown; values: unknown }[] = []
   const db = {
     select: () => ({
       from: () => ({
@@ -101,8 +103,15 @@ function fakeSelectDb(rows: unknown[]) {
         }),
       }),
     }),
+    update: () => ({
+      set: (values: unknown) => ({
+        where: async (cond: unknown) => {
+          updates.push({ id: collectParamValues(cond)[0], values })
+        },
+      }),
+    }),
   }
-  return { db: db as unknown as Db, orderByCalls }
+  return { db: db as unknown as Db, orderByCalls, updates }
 }
 
 /** SQL 조각의 StringChunk들을 이어붙여 리터럴 텍스트를 복원한다. */
@@ -181,9 +190,14 @@ describe('claimPending', () => {
     expect(rows[0]?.event.occurredAt).toBeInstanceOf(Date)
   })
 
-  it('tier 값이 유효하지 않은 행은 건너뛰고, 나머지 행은 정상 반환한다 — DB에 CHECK 제약이 없어 손상된 값이 들어올 수 있다', async () => {
+  it(
+    'tier 값이 유효하지 않은 행은 dead 처리하고, 나머지 행은 정상 반환한다 — ' +
+      '건너뛰기만 하면 그 행이 pending 으로 영원히 남아 매 사이클 LIMIT 20 클레임 창의 ' +
+      '앞자리를 다시 차지한다. 그런 행이 20개면 정상 알림은 한 건도 클레임되지 못하고 ' +
+      'TTL 로 전부 만료된다 — 영구 기아 상태다.',
+    async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { db } = fakeSelectDb([
+    const { db, updates } = fakeSelectDb([
       {
         id: 1,
         eventId: 10,
@@ -215,9 +229,15 @@ describe('claimPending', () => {
         expiresAt: new Date('2026-09-19T06:35:00Z'),
       },
     ])
+    // 손상된 행은 pending 으로 남지 않는다.
+    expect(updates).toEqual([
+      { id: 1, values: { status: 'dead', lastError: 'invalid-tier' } },
+    ])
+
     expect(consoleError).toHaveBeenCalled()
     consoleError.mockRestore()
-  })
+    },
+  )
 
   it(
     'critical tier를 nextAttemptAt보다 먼저 정렬한다 — ' +
@@ -441,5 +461,39 @@ describe('maxExternalId — 하이워터 마크의 기동 시 시드', () => {
     // 마크로 쓰면 externalId <= null 비교가 되어 필터가 무의미해진다.
     const { db } = fakeThenableDb([{ max: null }])
     expect(await createPostgresStore(db).maxExternalId('dart')).toBeNull()
+  })
+})
+
+/**
+ * I4 회귀 — lastDigestDate 가 메모리에만 있으면 KST 자정을 넘긴 재기동이 그 값을
+ * 오늘로 되돌려 전날 다이제스트가 영영 발송되지 않는다. 따라잡기 루프가 통째로
+ * 무력화되고, 다이제스트는 운영자의 유일한 사후 감사 기록이다(스펙 §7.4).
+ */
+describe('lastEventKstDate — 재기동 시 lastDigestDate 복원', () => {
+  it('가장 최근 이벤트의 KST 날짜를 반환한다', async () => {
+    const { db } = fakeThenableDb([{ firstSeenAt: new Date('2026-09-18T06:30:00Z') }])
+    expect(await createPostgresStore(db).lastEventKstDate()).toBe('2026-09-18')
+  })
+
+  it('UTC 가 아니라 KST 기준으로 날짜를 계산한다', async () => {
+    // 2026-09-18T15:00:00Z = 2026-09-19T00:00:00+09:00 — KST 로는 이미 19일이다.
+    // UTC 로 잘라내면 18일이 나와 하루치 다이제스트가 어긋난다.
+    const { db } = fakeThenableDb([{ firstSeenAt: new Date('2026-09-18T15:00:00Z') }])
+    expect(await createPostgresStore(db).lastEventKstDate()).toBe('2026-09-19')
+  })
+
+  it('테이블이 비면 null 을 반환한다 — 호출자가 오늘 날짜로 시작한다', async () => {
+    const { db } = fakeThenableDb([])
+    expect(await createPostgresStore(db).lastEventKstDate()).toBeNull()
+  })
+
+  it('first_seen_at 내림차순 1건으로 조회한다 — 오름차순이면 가장 오래된 날이 나온다', async () => {
+    const { db, orderByCalls } = fakeThenableDb([])
+    await createPostgresStore(db).lastEventKstDate()
+
+    expect(orderByCalls).toHaveLength(1)
+    const [order] = (orderByCalls[0] ?? []) as [SQL]
+    expect(order.queryChunks).toContain(events.firstSeenAt)
+    expect(sqlText(order).toLowerCase()).toContain('desc')
   })
 })

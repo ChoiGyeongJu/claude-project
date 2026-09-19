@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, isNotNull, lt, lte, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type { NormalizedEvent, Tier } from '@app/shared'
 import type { EventStore, PendingOutbox } from '../../ports/store.js'
+import { kstDateString } from '../../core/budget.js'
 import { apiUsage, events, outbox } from './schema.js'
 
 export type Db = PostgresJsDatabase<Record<string, never>>
@@ -31,6 +32,11 @@ function rehydrateEvent(payload: unknown): NormalizedEvent {
 }
 
 export function createPostgresStore(db: Db): EventStore {
+  // claimPending 에서도 불러야 해서 객체 리터럴 밖으로 끌어냈다.
+  async function markDead(id: number, error: string): Promise<void> {
+    await db.update(outbox).set({ status: 'dead', lastError: error }).where(eq(outbox.id, id))
+  }
+
   return {
     async recordEvent(event, verdict, opts) {
       return db.transaction(async (tx) => {
@@ -85,6 +91,19 @@ export function createPostgresStore(db: Db): EventStore {
       return rows[0]?.max ?? null
     },
 
+    async lastEventKstDate() {
+      // 메모리에만 있는 lastDigestDate 는 KST 자정을 넘긴 재기동이 오늘로 되돌려
+      // 전날 다이제스트를 영영 없앤다 — 다이제스트는 운영자의 유일한 사후 감사
+      // 기록이므로(스펙 §7.4) 기동 시 DB 에서 되살린다.
+      const rows = await db
+        .select({ firstSeenAt: events.firstSeenAt })
+        .from(events)
+        .orderBy(desc(events.firstSeenAt))
+        .limit(1)
+      const latest = rows[0]?.firstSeenAt
+      return latest ? kstDateString(latest) : null
+    },
+
     async claimPending(now, limit) {
       const rows = await db
         .select()
@@ -106,8 +125,13 @@ export function createPostgresStore(db: Db): EventStore {
           // DB에는 CHECK 제약이 없어 손상되거나 예상치 못한 tier 값이 들어올 수 있다.
           // 이 한 행 때문에 전체 디스패치 루프를 멈추지 않도록 건너뛰고, 원인 추적을 위해 크게 로그를 남긴다.
           console.error(
-            `[postgres-store] claimPending: outbox row ${r.id} has invalid tier "${r.tier}" — skipping`,
+            `[postgres-store] claimPending: outbox row ${r.id} has invalid tier "${r.tier}" — dead-lettering`,
           )
+          // 건너뛰기만 하면 이 행은 pending 으로 영원히 남는다. 정렬 기준상
+          // (critical 아님 → nextAttemptAt 오름차순) 가장 오래된 축이라 매 사이클
+          // LIMIT 20 클레임 창의 앞자리를 다시 차지한다 — 이런 행이 20개면 정상
+          // 알림은 단 한 건도 클레임되지 못하고 TTL 로 전부 만료된다.
+          await markDead(r.id, 'invalid-tier')
           continue
         }
         pending.push({
@@ -133,9 +157,7 @@ export function createPostgresStore(db: Db): EventStore {
         .where(eq(outbox.id, id))
     },
 
-    async markDead(id, error) {
-      await db.update(outbox).set({ status: 'dead', lastError: error }).where(eq(outbox.id, id))
-    },
+    markDead,
 
     async incrementApiUsage(sourceId, kstDate) {
       const rows = await db

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { kstDateString } from '../core/budget.js'
-import { createCircuit } from '../core/circuit.js'
+import { createCircuit, ALERT_THRESHOLD } from '../core/circuit.js'
 import type { EventSource } from '../ports/source.js'
 import type { EventStore } from '../ports/store.js'
 import type { Notifier } from '../ports/notifier.js'
 import type { Summarizer } from '../ports/summarizer.js'
 import type { Heartbeat } from './health.js'
-import { runCycle, runLoop, createSleeper, type CycleLogger, type Sleeper } from './cycle.js'
+import { runCycle, runLoop, createSleeper, type CycleLogger, type CycleState, type Sleeper } from './cycle.js'
 
 const NOW = new Date('2026-09-19T06:30:00Z')
 const TODAY = kstDateString(NOW)
@@ -16,7 +16,7 @@ function silentLog(): CycleLogger {
 }
 
 /** 이미 한 사이클을 돈 정상 가동 상태. 콜드 스타트 억제는 ingest.test.ts 가 다룬다. */
-function warmState(heartbeatFailures = 0) {
+function warmState(heartbeatFailures = 0): CycleState {
   return {
     lastDigestDate: TODAY,
     heartbeatFailures,
@@ -54,7 +54,7 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
     const log = silentLog()
 
     const result = await runCycle(
-      { source, store: failingStore(), notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      { source, store: failingStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
       warmState(),
       NOW,
     )
@@ -71,7 +71,7 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
     const log = silentLog()
 
     const result = await runCycle(
-      { source, store: healthyStore(), notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      { source, store: healthyStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
       warmState(),
       NOW,
     )
@@ -87,7 +87,7 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
     const log = silentLog()
 
     const result = await runCycle(
-      { source, store: failingStore(), notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      { source, store: failingStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
       warmState(2),
       NOW,
     )
@@ -158,7 +158,7 @@ describe('runLoop — 종료 신호가 대기 중에 오면 다음 사이클 없
     }
 
     await runLoop(
-      { source, store, notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      { source, store, notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
       warmState(),
       fakeSleeper,
       { shouldStop: () => shuttingDown },
@@ -177,12 +177,73 @@ describe('runLoop — 종료 신호가 대기 중에 오면 다음 사이클 없
     const log = silentLog()
 
     await runLoop(
-      { source, store, notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      { source, store, notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
       warmState(),
       createSleeper(),
       { shouldStop: () => true },
     )
 
     expect(incrementApiUsage).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * I7 회귀 — 채널이 하나면 "⚠️ 워커 연속 실패 N회" 와 일일 다이제스트(버려진 공시
+ * 목록·내부 카운터)가 구독자에게 그대로 방송된다. 공개 전환 당일에 터진다.
+ */
+describe('runCycle — 운영자 알림은 구독자 채널로 가지 않는다', () => {
+  function notifierPair() {
+    const subscriber: Notifier = { send: vi.fn(async () => ({ ok: true }) as const) }
+    const operator: Notifier = { send: vi.fn(async () => ({ ok: true }) as const) }
+    return { subscriber, operator }
+  }
+
+  it('연속 실패 알림은 operatorNotifier 로만 간다', async () => {
+    const { subscriber, operator } = notifierPair()
+    const circuit = createCircuit()
+    const heartbeat: Heartbeat = { ping: vi.fn(async () => true) }
+    const deps = {
+      source, store: failingStore(), notifier: subscriber, operatorNotifier: operator,
+      summarizer, heartbeat, circuit, log: silentLog(),
+    }
+
+    // ALERT_THRESHOLD(5) 회째에 알림이 나간다.
+    let state = warmState()
+    for (let i = 0; i < ALERT_THRESHOLD; i += 1) {
+      const { sleepMs: _sleepMs, ...next } = await runCycle(deps, state, NOW)
+      state = next
+    }
+
+    expect(operator.send).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(operator.send).mock.calls[0]?.[0]).toContain('워커 연속 실패')
+    expect(subscriber.send).not.toHaveBeenCalled()
+  })
+
+  it('다이제스트는 operatorNotifier 로만 간다', async () => {
+    const { subscriber, operator } = notifierPair()
+    const store = {
+      incrementApiUsage: async () => 1,
+      claimPending: async () => [],
+      digestFor: async () => ({
+        sent: { critical: 0, high: 0, normal: 0 },
+        dead: 0, missedCandidates: [], errorCounts: {}, missedTotal: 0,
+      }),
+      getApiUsage: async () => 0,
+    } as unknown as EventStore
+    const heartbeat: Heartbeat = { ping: vi.fn(async () => true) }
+
+    // 어제 날짜를 들고 들어가면 이번 사이클에 어제치 다이제스트가 나간다.
+    await runCycle(
+      {
+        source, store, notifier: subscriber, operatorNotifier: operator,
+        summarizer, heartbeat, circuit: createCircuit(), log: silentLog(),
+      },
+      { ...warmState(), lastDigestDate: '2026-09-18' },
+      NOW,
+    )
+
+    expect(operator.send).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(operator.send).mock.calls[0]?.[0]).toContain('리포트')
+    expect(subscriber.send).not.toHaveBeenCalled()
   })
 })

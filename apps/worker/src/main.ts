@@ -21,6 +21,11 @@ async function main(): Promise<void> {
   const store = createPostgresStore(db)
   const source = createDartSource({ apiKey: cfg.dartApiKey })
   const notifier = createTelegramNotifier(cfg.telegram)
+  // 운영자 채널이 설정되면 다이제스트와 장애 알림만 그쪽으로 뺀다. 토큰 버킷은
+  // 인스턴스마다 따로인데, 텔레그램의 분당 한도가 채팅 단위라 이쪽이 맞다.
+  const operatorNotifier = cfg.operatorChatId
+    ? createTelegramNotifier({ token: cfg.telegram.token, chatId: cfg.operatorChatId })
+    : notifier
   // LLM 요약은 지금 붙여봐야 값이 없다. 공시 본문이 아직 없어 모델에 들어가는
   // 입력이 공시 제목뿐인데, 그 제목은 같은 메시지 두 줄 위에 이미 그대로 찍혀
   // 나간다 — 돈과 최대 30초의 직렬 지연을 폴링 루프 위에서 쓰면서 제목을
@@ -53,12 +58,21 @@ async function main(): Promise<void> {
   // recordEvent 로 보내고, 그 뒤로도 매 사이클 같은 100건이 no-op 트랜잭션으로
   // 반복된다 — 2.5초 주기가 DB 왕복 속도에 묶인다.
   const highWaterMark = await store.maxExternalId(source.id)
-  log.info({ highWaterMark }, 'worker started')
+
+  // lastDigestDate 를 메모리에서만 초기화하면 KST 자정을 넘긴 재기동이 그 값을
+  // 오늘로 되돌려 전날 다이제스트가 영영 발송되지 않는다 — 따라잡기 루프가
+  // 통째로 무력화된다. DB 의 마지막 이벤트 날짜에서 복원한다.
+  const lastDigestDate = (await store.lastEventKstDate()) ?? kstDateString(new Date())
+
+  log.info(
+    { highWaterMark, lastDigestDate, operatorChannel: cfg.operatorChatId !== null },
+    'worker started',
+  )
 
   await runLoop(
-    { source, store, notifier, summarizer, heartbeat, circuit, log },
+    { source, store, notifier, operatorNotifier, summarizer, heartbeat, circuit, log },
     {
-      lastDigestDate: kstDateString(new Date()),
+      lastDigestDate,
       heartbeatFailures: 0,
       highWaterMark,
       // 첫 사이클은 기록만 하고 한 건도 발송하지 않는다. 워커는 자신이 얼마나

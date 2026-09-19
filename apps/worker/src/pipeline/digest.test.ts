@@ -78,3 +78,41 @@ describe('catchUpDigests — 장애가 자정을 두 번 넘겨도 중간 날을
     1_000,
   )
 })
+
+/**
+ * I3 회귀 — send() 결과를 버리면, 4096자 초과·429·네트워크 오류로 거부된
+ * 다이제스트가 조용히 사라지고 날짜만 전진해 그날의 기록이 영영 없어진다.
+ */
+describe('catchUpDigests — 발송에 실패하면 날짜를 전진시키지 않는다', () => {
+  const failed = { ok: false, retryAfterMs: null, error: 'MESSAGE_TOO_LONG' } as const
+
+  it('실패하면 같은 날짜를 그대로 돌려줘 다음 사이클이 재시도한다', async () => {
+    const digestFor = vi.fn<EventStore['digestFor']>(async () => emptyAgg)
+    const send = vi.fn(async () => failed)
+    const next = await catchUpDigests(deps(digestFor, send), '2026-09-18', '2026-09-19')
+
+    expect(next).toBe('2026-09-18') // 전진하지 않는다
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
+  it('밀린 날짜 중간에서 실패하면 성공한 날까지만 전진한다', async () => {
+    const digestFor = vi.fn<EventStore['digestFor']>(async () => emptyAgg)
+    const send = vi.fn<Notifier['send']>()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce(failed)
+    const next = await catchUpDigests(deps(digestFor, send), '2026-09-17', '2026-09-20')
+
+    // 17일은 나갔고 18일에서 막혔다 — 18일부터 다시 시작한다.
+    expect(next).toBe('2026-09-18')
+    expect(digestFor.mock.calls.map((c) => c[0])).toEqual(['2026-09-17', '2026-09-18'])
+  })
+
+  it('자체 레이트 리밋도 실패로 취급해 재시도한다 — 다음 사이클에 자연히 풀린다', async () => {
+    const digestFor = vi.fn<EventStore['digestFor']>(async () => emptyAgg)
+    const send = vi.fn(async () => (
+      { ok: false, retryAfterMs: 4_000, error: 'local-rate-limit' } as const
+    ))
+    const next = await catchUpDigests(deps(digestFor, send), '2026-09-18', '2026-09-19')
+    expect(next).toBe('2026-09-18')
+  })
+})

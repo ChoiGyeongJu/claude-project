@@ -29,6 +29,15 @@ export type EventStore = {
    */
   maxExternalId(sourceId: string): Promise<string | null>
 
+  /**
+   * 가장 최근 events.first_seen_at 의 KST 날짜(YYYY-MM-DD). 행이 없으면 null.
+   *
+   * lastDigestDate 를 메모리에만 두면 KST 자정을 넘긴 재기동이 그 값을 오늘로
+   * 되돌려 전날 다이제스트가 영영 발송되지 않는다 — 따라잡기 루프가 통째로
+   * 무력화된다.
+   */
+  lastEventKstDate(): Promise<string | null>
+
   claimPending(now: Date, limit: number): Promise<PendingOutbox[]>
   markSent(outboxId: number): Promise<void>
   /**
