@@ -900,6 +900,14 @@ export const MAX_DELIVERY_AGE_MS = 10 * 60_000
 /** outbox 대기가 이 건수 이상이면 한 메시지로 병합한다. */
 export const MERGE_THRESHOLD = 3
 
+/**
+ * 한 병합 메시지의 문자 상한. 텔레그램 본문 한도는 4096자이고,
+ * 초과하면 메시지 **전체**가 거부된다 — 재시도해도 같은 크기라 배치가 통째로 dead 가 된다.
+ * 현재 CLAIM_LIMIT(20) 기준 실측 최대는 약 2,500자라 여유가 있지만,
+ * 그 안전은 서로 다른 파일의 상수 사이 암묵적 결합에 기대고 있다. 여기서 못박는다.
+ */
+export const MAX_MERGED_CHARS = 3_500
+
 const TTL_MS: Record<Tier, number> = {
   critical: 5 * 60_000,
   high: 30 * 60_000,
@@ -2567,7 +2575,7 @@ Expected: FAIL — dispatch 모듈 없음
 `apps/worker/src/pipeline/dispatch.ts`:
 ```ts
 import { formatEvent, formatMerged } from '../core/format.js'
-import { MERGE_THRESHOLD } from '../core/policy.js'
+import { MAX_MERGED_CHARS, MERGE_THRESHOLD } from '../core/policy.js'
 import { MAX_ATTEMPTS, nextAttemptAt } from '../core/retry.js'
 import { LOCAL_RATE_LIMIT } from '../ports/notifier.js'
 import type { Notifier } from '../ports/notifier.js'
@@ -2608,11 +2616,25 @@ export async function runDispatch(deps: DispatchDeps, now: Date): Promise<Dispat
     await sendOne(deps, item, formatEvent(item.event, item.tier), now, stats)
   }
 
-  // 그 외 — 임계 이상이면 한 메시지로 묶어 rate limit 압박을 줄인다
+  // 그 외 — 임계 이상이면 한 메시지로 묶어 rate limit 압박을 줄인다.
+  // 병합된 알림에는 요약을 붙이지 않는다: 길이 예산을 지키고 LLM 지연을 피하기 위한
+  // 의도된 절충이다(같은 공시라도 대기 건수에 따라 요약 유무가 달라진다).
   if (others.length >= MERGE_THRESHOLD) {
-    const text = formatMerged(others.map((i) => ({ event: i.event, tier: i.tier })))
+    // 문자 예산을 넘지 않을 만큼만 담는다. 남은 건은 마킹하지 않으므로 pending 으로
+    // 남아 다음 사이클에 다시 claim 된다 — 유실되지 않는다.
+    const batch: PendingOutbox[] = []
+    for (const item of others) {
+      const next = [...batch, item]
+      if (formatMerged(next.map((i) => ({ event: i.event, tier: i.tier }))).length > MAX_MERGED_CHARS) break
+      batch.push(item)
+    }
+
+    const text = formatMerged(batch.map((i) => ({ event: i.event, tier: i.tier })))
     const res = await deps.notifier.send(text)
-    for (const item of others) await applyResult(deps, item, res, now, stats)
+    // 발송 성공을 확인한 뒤 sent 로 마킹한다 = at-least-once.
+    // 텔레그램에는 멱등성 키가 없어 "받았는데 응답 유실" 을 구분할 수 없고,
+    // 알림 서비스에서는 중복이 누락보다 낫다는 판단이다.
+    for (const item of batch) await applyResult(deps, item, res, now, stats)
   } else {
     for (const item of others) {
       const summary = await deps.summarizer.summarize(item.event)
