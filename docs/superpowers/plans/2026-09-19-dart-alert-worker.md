@@ -19,6 +19,8 @@
 - **DART 응답 필드는 9개뿐이다**: `corp_cls`, `corp_name`, `corp_code`, `stock_code`, `report_nm`, `rcept_no`, `flr_nm`, `rcept_dt`, `rm`. `pblntf_ty`는 요청 파라미터이며 **응답에 없다.** 모든 유형 판별은 `report_nm` 문자열 패턴으로 한다.
 - **API 한도**: OpenDART 일 20,000건. 초과 시 에러코드 `020`.
 - **금지 사항**: 호재/악재 판단, 목표가, 매수·매도 의견을 생성하는 코드를 작성하지 않는다. LLM 프롬프트에도 포함하지 않는다.
+- **실행은 항상 컴파일 후**: 소스는 NodeNext 규약대로 `'./keywords.js'` 처럼 `.js` 확장자로 import 하는데 실제 파일은 `.ts` 다. Node 는 이 확장자를 되돌려주지 않으므로 **`.ts` 소스를 직접 실행할 수 없다**(실측 확인). `dev` 스크립트와 Docker 모두 `tsc` 로 컴파일한 뒤 `dist/main.js` 를 실행한다.
+- **strip-only 비호환 구문 금지**: `dist/main.js` 가 `@app/shared` 를 `.ts` 인 채로 로드하므로 그 경로는 여전히 Node 의 strip-only 모드를 탄다. strip-only 는 **파라미터 프로퍼티**(`constructor(private x: T)`), **enum**, **namespace**, **데코레이터** 를 처리하지 못하고 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 로 죽는다. vitest 는 esbuild 로 트랜스파일하므로 **테스트는 통과하지만 런타임이 죽는다** — 테스트 통과가 이 문제를 잡아주지 않는다. 네 가지 모두 쓰지 말 것.
 - **비밀값**: API 키·봇 토큰은 전부 환경변수. 코드·테스트·fixture에 하드코딩 금지.
 - **테스트**: 실제 네트워크를 호출하는 자동 테스트를 만들지 않는다. 외부 응답은 fixture로 고정한다.
 - **커밋**: 각 Task 종료 시 1커밋. 메시지는 Conventional Commits.
@@ -28,7 +30,7 @@
 ## File Structure
 
 ```
-claude-project/
+market-radar/
 ├── package.json                      # pnpm workspace 루트
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
@@ -97,7 +99,7 @@ packages:
 루트 `package.json`:
 ```json
 {
-  "name": "claude-project",
+  "name": "market-radar",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
@@ -203,7 +205,7 @@ describe('isPass', () => {
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dev": "node --experimental-strip-types src/main.ts"
+    "dev": "tsc -p tsconfig.json && node dist/main.js"
   },
   "dependencies": { "@app/shared": "workspace:*" },
   "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0", "@types/node": "^22.0.0" }
@@ -898,6 +900,14 @@ export const MAX_DELIVERY_AGE_MS = 10 * 60_000
 /** outbox 대기가 이 건수 이상이면 한 메시지로 병합한다. */
 export const MERGE_THRESHOLD = 3
 
+/**
+ * 한 병합 메시지의 문자 상한. 텔레그램 본문 한도는 4096자이고,
+ * 초과하면 메시지 **전체**가 거부된다 — 재시도해도 같은 크기라 배치가 통째로 dead 가 된다.
+ * 현재 CLAIM_LIMIT(20) 기준 실측 최대는 약 2,500자라 여유가 있지만,
+ * 그 안전은 서로 다른 파일의 상수 사이 암묵적 결합에 기대고 있다. 여기서 못박는다.
+ */
+export const MAX_MERGED_CHARS = 3_500
+
 const TTL_MS: Record<Tier, number> = {
   critical: 5 * 60_000,
   high: 30 * 60_000,
@@ -1159,7 +1169,12 @@ export type EventStore = {
 
   claimPending(now: Date, limit: number): Promise<PendingOutbox[]>
   markSent(outboxId: number): Promise<void>
-  markFailed(outboxId: number, error: string, nextAttemptAt: Date): Promise<void>
+  /**
+   * 실패를 기록한다. `attempts` 는 **호출자가 결정한 최종값**이며 스토어는 시키는 대로 쓴다.
+   * 스토어가 스스로 +1 하면 스로틀링(local-rate-limit)까지 예산을 잠식해,
+   * 자가 조절만으로 정상 알림이 dead 가 된다.
+   */
+  markFailed(outboxId: number, error: string, nextAttemptAt: Date, attempts: number): Promise<void>
   markDead(outboxId: number, error: string): Promise<void>
 
   incrementApiUsage(sourceId: string, kstDate: string): Promise<number>
@@ -1169,6 +1184,12 @@ export type EventStore = {
 
 `apps/worker/src/ports/notifier.ts`:
 ```ts
+/**
+ * 우리가 스스로 조절해서 보내지 않은 경우의 error 값.
+ * 텔레그램의 실제 실패와 구분해야 한다 — 이건 재시도 횟수를 소비하면 안 된다.
+ */
+export const LOCAL_RATE_LIMIT = 'local-rate-limit'
+
 export type SendResult =
   | { ok: true }
   | { ok: false; retryAfterMs: number | null; error: string }
@@ -1332,6 +1353,7 @@ git commit -m "feat: 포트 인터페이스와 Drizzle 스키마, 초기 마이�
 ```ts
 import { describe, it, expect, vi } from 'vitest'
 import type { NormalizedEvent } from '@app/shared'
+import { getTableName } from 'drizzle-orm'
 import { createPostgresStore, type Db } from './postgres.js'
 
 const event: NormalizedEvent = {
@@ -1350,7 +1372,9 @@ function fakeDb(insertedEventId: number | null) {
   const calls: string[] = []
   const tx = {
     insert: (table: unknown) => {
-      const name = (table as { _: { name: string } })._.name
+      // drizzle 의 `_` 는 TypeScript 전용 팬텀 속성이라 런타임 값이 없다.
+      // 반드시 getTableName() 을 써야 한다 (실측 확인됨).
+      const name = getTableName(table as never)
       calls.push(name)
       return {
         values: () => ({
@@ -1467,9 +1491,12 @@ export function createPostgresStore(db: Db): EventStore {
     },
 
     async claimPending(now, limit) {
+      // critical 우선. nextAttemptAt 만으로 정렬하면 CLAIM_LIMIT 경계에서
+      // critical 이 밀려 TTL(5분)을 넘길 수 있다 — 가장 중요한 알림이 먼저 버려진다.
       const rows = await db.select().from(outbox)
         .where(and(eq(outbox.status, 'pending'), lte(outbox.nextAttemptAt, now)))
-        .orderBy(asc(outbox.nextAttemptAt))
+        .orderBy(sql`CASE WHEN ${outbox.tier} = 'critical' THEN 0 ELSE 1 END`,
+                 asc(outbox.nextAttemptAt))
         .limit(limit)
 
       return rows.map((r): PendingOutbox => ({
@@ -1486,9 +1513,10 @@ export function createPostgresStore(db: Db): EventStore {
       await db.update(outbox).set({ status: 'sent' }).where(eq(outbox.id, id))
     },
 
-    async markFailed(id, error, nextAttemptAt) {
+    async markFailed(id, error, nextAttemptAt, attempts) {
+      // 스스로 +1 하지 않는다 — attempts 는 호출자가 결정한 값이다.
       await db.update(outbox)
-        .set({ attempts: sql`${outbox.attempts} + 1`, lastError: error, nextAttemptAt })
+        .set({ attempts, lastError: error, nextAttemptAt })
         .where(eq(outbox.id, id))
     },
 
@@ -1591,6 +1619,13 @@ export function kstDateString(now: Date): string {
   return new Date(now.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10)
 }
 
+/** 'YYYY-MM-DD' 의 다음 날. 밀린 다이제스트를 하루씩 따라잡는 데 쓴다. */
+export function nextKstDate(kstDate: string): string {
+  const d = new Date(`${kstDate}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
 /**
  * 남은 예산에 따라 폴링 주기를 늘린다.
  * 한도 초과로 020 에러를 맞아 서비스가 통째로 멈추는 것이 최악의 실패이므로 보수적으로 잡는다.
@@ -1688,10 +1723,23 @@ import { parseDartResponse } from '../../core/dart/schema.js'
 
 const ENDPOINT = 'https://opendart.fss.or.kr/api/list.json'
 
+/**
+ * Node 의 fetch 에는 기본 타임아웃이 없다. 이 값을 주지 않으면 연결이 매달릴 때
+ * 루프 전체가 무한정 멈추고, heartbeat 이 영영 안 뛰어 외부 감시가 "VM 사망"으로
+ * 오판한다 — 워커는 살아 있는데 고칠 수 없는 상태가 된다.
+ */
+const REQUEST_TIMEOUT_MS = 10_000
+
 export class DartApiError extends Error {
-  constructor(readonly status: string, message: string) {
+  // 파라미터 프로퍼티(`constructor(readonly status: ...)`)를 쓰면 안 된다.
+  // Node 의 strip-only 타입 스트리핑이 지원하지 않아 `node src/main.ts` 가
+  // ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX 로 죽는다 (실측 확인).
+  readonly status: string
+
+  constructor(status: string, message: string) {
     super(`DART ${status}: ${message}`)
     this.name = 'DartApiError'
+    this.status = status
   }
 }
 
@@ -1713,7 +1761,9 @@ export function createDartSource(cfg: DartSourceConfig): EventSource {
       url.searchParams.set('sort', 'date')
       url.searchParams.set('sort_mth', 'desc')
 
-      const res = await doFetch(url.toString())
+      const res = await doFetch(url.toString(), {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
       if (!res.ok) throw new Error(`DART HTTP ${res.status}`)
 
       const parsed = parseDartResponse(await res.json())
@@ -1914,6 +1964,7 @@ Expected: FAIL — telegram 모듈 없음
 
 `apps/worker/src/adapters/notifier/telegram.ts`:
 ```ts
+import { LOCAL_RATE_LIMIT } from '../../ports/notifier.js'
 import type { Notifier, SendResult } from '../../ports/notifier.js'
 import { createTokenBucket, MESSAGES_PER_MINUTE } from './rate-limiter.js'
 
@@ -1930,6 +1981,9 @@ const BUCKET_CAPACITY = 5
 
 /** 15건/분 = 4초당 토큰 1개. 토큰이 없으면 이만큼 뒤에 재시도한다. */
 const REFILL_WAIT_MS = 4_000
+
+/** fetch 는 기본 타임아웃이 없다. 없으면 발송이 매달려 루프 전체가 멈춘다. */
+const REQUEST_TIMEOUT_MS = 15_000
 
 type TelegramResponse = {
   ok: boolean
@@ -1951,12 +2005,13 @@ export function createTelegramNotifier(cfg: TelegramConfig): Notifier {
       // 429를 맞기 전에 우리가 먼저 조인다.
       // 실패로 반환하면 dispatch의 기존 재시도 경로가 그대로 처리한다.
       if (!bucket.tryTake(now())) {
-        return { ok: false, retryAfterMs: REFILL_WAIT_MS, error: 'local-rate-limit' }
+        return { ok: false, retryAfterMs: REFILL_WAIT_MS, error: LOCAL_RATE_LIMIT }
       }
 
       const res = await doFetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
           chat_id: cfg.chatId,
           text: markdownV2,
@@ -2267,12 +2322,25 @@ import type { Summarizer } from '../../ports/summarizer.js'
  * 사실 요약과 수치 추출만 수행한다.
  */
 export const SUMMARY_SYSTEM_PROMPT = [
-  '너는 한국 기업 공시를 요약하는 도구다.',
-  '공시에 적힌 사실만 2~3줄로 요약하라.',
-  '금액, 비율, 지분율, 기간 같은 수치가 있으면 반드시 포함하라.',
-  '공시에 없는 내용을 추측하거나 덧붙이지 마라.',
+  '너는 한국 기업 공시 제목을 일반 투자자가 이해할 수 있게 풀어 쓰는 도구다.',
+  '입력으로는 회사명과 공시 제목만 주어진다. 공시 본문은 주어지지 않는다.',
+  '공시 제목이 어떤 종류의 사건을 뜻하는지 한 문장으로 설명하라.',
+  '금액, 비율, 지분율 같은 수치는 제목에 실제로 있을 때만 포함하라.',
+  '제목에 없는 내용을 추측하거나 지어내지 마라.',
   '평가, 전망, 권유에 해당하는 표현을 쓰지 마라.',
 ].join('\n')
+
+/**
+ * 출력측 방어선. 모델은 시스템 프롬프트를 무시할 수 있으므로 반환 텍스트도 검사한다.
+ * 규제 경계(유사투자자문)는 프롬프트 지시 하나에 맡기기에는 위험이 크다.
+ */
+const FORBIDDEN_IN_OUTPUT: readonly string[] = [
+  '호재', '악재', '목표가', '적정주가', '매수', '매도', '투자의견', '상승 여력', '하락 여력',
+]
+
+export function violatesBoundary(text: string): boolean {
+  return FORBIDDEN_IN_OUTPUT.some((w) => text.includes(w))
+}
 
 export type LlmConfig = {
   apiKey: string
@@ -2282,6 +2350,9 @@ export type LlmConfig = {
 }
 
 type LlmResponse = { content?: Array<{ type: string; text?: string }> }
+
+/** 생성은 오래 걸릴 수 있으나 무한히는 아니다. 매달리면 알림 전체가 멈춘다. */
+const REQUEST_TIMEOUT_MS = 30_000
 
 export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
   const doFetch = cfg.fetchImpl ?? fetch
@@ -2296,6 +2367,7 @@ export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
             'x-api-key': cfg.apiKey,
             'anthropic-version': '2023-06-01',
           },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           body: JSON.stringify({
             model: cfg.model,
             max_tokens: 300,
@@ -2310,8 +2382,13 @@ export function createLlmSummarizer(cfg: LlmConfig): Summarizer {
         if (!res.ok) return null
 
         const body = (await res.json()) as LlmResponse
-        const text = body.content?.find((c) => c.type === 'text')?.text
-        return text?.trim() || null
+        const text = body.content?.find((c) => c.type === 'text')?.text?.trim()
+        if (!text) return null
+
+        // 규제 경계를 넘은 출력은 버린다. 요약 없이 알림만 나가는 편이 안전하다.
+        if (violatesBoundary(text)) return null
+
+        return text
       } catch {
         return null   // 요약 실패가 발송을 막아서는 안 된다
       }
@@ -2522,8 +2599,9 @@ Expected: FAIL — dispatch 모듈 없음
 `apps/worker/src/pipeline/dispatch.ts`:
 ```ts
 import { formatEvent, formatMerged } from '../core/format.js'
-import { MERGE_THRESHOLD } from '../core/policy.js'
+import { MAX_MERGED_CHARS, MERGE_THRESHOLD } from '../core/policy.js'
 import { MAX_ATTEMPTS, nextAttemptAt } from '../core/retry.js'
+import { LOCAL_RATE_LIMIT } from '../ports/notifier.js'
 import type { Notifier } from '../ports/notifier.js'
 import type { EventStore, PendingOutbox } from '../ports/store.js'
 import type { Summarizer } from '../ports/summarizer.js'
@@ -2562,11 +2640,25 @@ export async function runDispatch(deps: DispatchDeps, now: Date): Promise<Dispat
     await sendOne(deps, item, formatEvent(item.event, item.tier), now, stats)
   }
 
-  // 그 외 — 임계 이상이면 한 메시지로 묶어 rate limit 압박을 줄인다
+  // 그 외 — 임계 이상이면 한 메시지로 묶어 rate limit 압박을 줄인다.
+  // 병합된 알림에는 요약을 붙이지 않는다: 길이 예산을 지키고 LLM 지연을 피하기 위한
+  // 의도된 절충이다(같은 공시라도 대기 건수에 따라 요약 유무가 달라진다).
   if (others.length >= MERGE_THRESHOLD) {
-    const text = formatMerged(others.map((i) => ({ event: i.event, tier: i.tier })))
+    // 문자 예산을 넘지 않을 만큼만 담는다. 남은 건은 마킹하지 않으므로 pending 으로
+    // 남아 다음 사이클에 다시 claim 된다 — 유실되지 않는다.
+    const batch: PendingOutbox[] = []
+    for (const item of others) {
+      const next = [...batch, item]
+      if (formatMerged(next.map((i) => ({ event: i.event, tier: i.tier }))).length > MAX_MERGED_CHARS) break
+      batch.push(item)
+    }
+
+    const text = formatMerged(batch.map((i) => ({ event: i.event, tier: i.tier })))
     const res = await deps.notifier.send(text)
-    for (const item of others) await applyResult(deps, item, res, now, stats)
+    // 발송 성공을 확인한 뒤 sent 로 마킹한다 = at-least-once.
+    // 텔레그램에는 멱등성 키가 없어 "받았는데 응답 유실" 을 구분할 수 없고,
+    // 알림 서비스에서는 중복이 누락보다 낫다는 판단이다.
+    for (const item of batch) await applyResult(deps, item, res, now, stats)
   } else {
     for (const item of others) {
       const summary = await deps.summarizer.summarize(item.event)
@@ -2598,8 +2690,12 @@ async function applyResult(
     return
   }
 
-  const attempts = item.attempts + 1
-  if (attempts >= MAX_ATTEMPTS) {
+  // 우리가 스스로 조절해서 안 보낸 것은 실패가 아니다 — 시도 횟수를 소비하면
+  // 버스트 때 자가 스로틀링만으로 재시도 예산이 바닥나 정상 알림이 버려진다.
+  const throttled = res.error === LOCAL_RATE_LIMIT
+  const attempts = throttled ? item.attempts : item.attempts + 1
+
+  if (!throttled && attempts >= MAX_ATTEMPTS) {
     await deps.store.markDead(item.id, res.error)
     stats.dead += 1
     return
@@ -2610,7 +2706,7 @@ async function applyResult(
     ? new Date(now.getTime() + res.retryAfterMs)
     : nextAttemptAt(item.attempts, now)
 
-  await deps.store.markFailed(item.id, res.error, next)
+  await deps.store.markFailed(item.id, res.error, next, attempts)
   stats.failed += 1
 }
 ```
@@ -2762,7 +2858,11 @@ Expected: FAIL — health 모듈 없음
 
 `apps/worker/src/pipeline/health.ts`:
 ```ts
-export type Heartbeat = { ping(): Promise<void> }
+/** ping() 은 절대 throw 하지 않는다. 반환값은 "모니터링 서비스가 확인했는가". */
+/** heartbeat 은 finally 에서 돌므로 가장 짧아야 한다. 여기가 매달리면 루프가 멈춘다. */
+const PING_TIMEOUT_MS = 5_000
+
+export type Heartbeat = { ping(): Promise<boolean> }
 
 export type HeartbeatConfig = {
   url: string | null
@@ -2776,12 +2876,16 @@ export type HeartbeatConfig = {
 export function createHeartbeat(cfg: HeartbeatConfig): Heartbeat {
   const doFetch = cfg.fetchImpl ?? fetch
   return {
-    async ping(): Promise<void> {
-      if (!cfg.url) return
+    async ping(): Promise<boolean> {
+      if (!cfg.url) return true // 설정하지 않은 경우는 실패가 아니다
       try {
-        await doFetch(cfg.url)
+        const res = await doFetch(cfg.url, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) })
+        // 상태 코드를 반드시 본다. URL 오타나 계정 만료는 4xx/5xx 로 오는데
+        // 이를 성공으로 취급하면 "감시가 깨진 상태"가 영원히 보이지 않는다.
+        return res.ok
       } catch {
         // 감시 서비스 장애가 워커를 멈추게 해서는 안 된다
+        return false
       }
     },
   }
@@ -2896,6 +3000,8 @@ export type DigestData = {
   apiCalls: number
   missedCandidates: MissedCandidate[]
   errorCounts: Record<string, number>
+  /** 잘리지 않은 총계. missedCandidates.length 를 실제 건수로 쓰면 심각도를 과소 표시한다. */
+  missedTotal: number
 }
 
 export function formatDigest(d: DigestData): string {
@@ -2917,7 +3023,9 @@ export function formatDigest(d: DigestData): string {
     `API    ${d.apiCalls} / ${DAILY_LIMIT}`,
     `에러   ${errors}`,
     '',
-    `미매칭 ${d.missedCandidates.length}건 \\(룰 튜닝 후보\\)`,
+    d.missedTotal > d.missedCandidates.length
+      ? `미매칭 ${d.missedTotal}건 \\(상위 ${d.missedCandidates.length}건 표시 · 룰 튜닝 후보\\)`
+      : `미매칭 ${d.missedTotal}건 \\(룰 튜닝 후보\\)`,
     missed,
   ].join('\n')
 }
@@ -2932,6 +3040,10 @@ export function formatDigest(d: DigestData): string {
     sent: { critical: number; high: number; normal: number }
     dead: number
     missedCandidates: Array<{ title: string; corpName: string | null; ticker: string | null }>
+    /** outbox.lastError 집계. 측정하지 않으면서 "에러 없음"을 표시하면 거짓 안심이 된다. */
+    errorCounts: Record<string, number>
+    /** 잘리지 않은 미매칭 총계. missedCandidates 는 상위 N건만 담으므로 이 값과 다를 수 있다. */
+    missedTotal: number
   }>
 ```
 
@@ -2978,13 +3090,47 @@ export function formatDigest(d: DigestData): string {
         lt(events.firstSeenAt, dayEnd),
       )).limit(50)
 
-      return { sent, dead: deadRows[0]?.n ?? 0, missedCandidates: missed }
+      // 에러 집계. 측정하지 않으면서 "없음"을 표시하는 것이 가장 나쁜 실패다.
+      // 상위 5종만 노출한다 — 전부 나열하면 다이제스트가 읽히지 않는다.
+      const errorRows = await db.select({
+        err: outbox.lastError, n: sql<number>`count(*)::int`,
+      }).from(outbox)
+        .innerJoin(events, eq(outbox.eventId, events.id))
+        .where(and(
+          isNotNull(outbox.lastError),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+        .groupBy(outbox.lastError)
+        .orderBy(desc(sql`count(*)`))
+        .limit(5)
+
+      const errorCounts: Record<string, number> = {}
+      for (const r of errorRows) if (r.err) errorCounts[r.err] = r.n
+
+      // 잘리지 않은 총계를 따로 센다 — 50건 상한에 걸린 날 "50건"으로 보이면
+      // 심각도가 과소 표시되고, 운영자는 문제가 작다고 오판한다.
+      const missedTotalRows = await db.select({ n: sql<number>`count(*)::int` })
+        .from(events).where(and(
+          eq(events.verdict, 'drop'),
+          eq(events.rule, 'no-keyword-match'),
+          gte(events.firstSeenAt, dayStart),
+          lt(events.firstSeenAt, dayEnd),
+        ))
+
+      return {
+        sent,
+        dead: deadRows[0]?.n ?? 0,
+        missedCandidates: missed,
+        errorCounts,
+        missedTotal: missedTotalRows[0]?.n ?? 0,
+      }
     },
 ```
 
 import 문에 `gte`, `lt` 추가:
 ```ts
-import { and, asc, eq, gte, lt, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, isNotNull, lt, lte, sql } from 'drizzle-orm'
 ```
 
 - [ ] **Step 6: 다이제스트 파이프라인 작성**
@@ -3011,7 +3157,8 @@ export async function runDigest(deps: DigestDeps, kstDate: string): Promise<void
     dead: agg.dead,
     apiCalls,
     missedCandidates: agg.missedCandidates,
-    errorCounts: {},
+    errorCounts: agg.errorCounts,
+    missedTotal: agg.missedTotal,
   }))
 }
 ```
@@ -3147,7 +3294,7 @@ pnpm --filter @app/worker add pino
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import pino from 'pino'
-import { budgetGuard, kstDateString } from './core/budget.js'
+import { budgetGuard, kstDateString, nextKstDate } from './core/budget.js'
 import { ALERT_THRESHOLD, createCircuit } from './core/circuit.js'
 import { pollIntervalMs } from './core/schedule.js'
 import { loadConfig } from './config.js'
@@ -3162,7 +3309,23 @@ import { createHeartbeat } from './pipeline/health.js'
 
 const log = pino({ level: process.env.LOG_LEVEL ?? 'info' })
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+/**
+ * 중단 가능한 sleep. 종료 신호가 오면 즉시 깨운다.
+ * 평범한 setTimeout 이면 주말 sleep(최대 5분)이나 서킷 백오프(최대 80초) 중에
+ * SIGTERM 이 와도 그게 끝나야 루프 조건을 다시 보는데, Docker 기본 유예는 10초라
+ * 그전에 SIGKILL 이 떨어진다 — 핸들러가 있으나 마나가 된다.
+ */
+function createSleeper() {
+  let wake: (() => void) | null = null
+  return {
+    sleep: (ms: number) =>
+      new Promise<void>((resolve) => {
+        const t = setTimeout(() => { wake = null; resolve() }, ms)
+        wake = () => { clearTimeout(t); wake = null; resolve() }
+      }),
+    wakeNow: () => wake?.(),
+  }
+}
 
 async function main(): Promise<void> {
   const cfg = loadConfig(process.env)
@@ -3177,9 +3340,23 @@ async function main(): Promise<void> {
   const circuit = createCircuit()
 
   let lastDigestDate = kstDateString(new Date())
+  let heartbeatFailures = 0
+  let shuttingDown = false
+  const sleeper = createSleeper()
+
+  // Docker stop·호스트 재부팅은 SIGTERM 으로 온다. 핸들러가 없으면 발송 직후
+  // markSent 직전에 죽어 재시작 시 중복 알림이 나간다 — 매 재배포마다 발생한다.
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(sig, () => {
+      if (shuttingDown) process.exit(1) // 두 번째 신호는 즉시 종료
+      shuttingDown = true
+      log.info({ sig }, 'shutdown requested — finishing current cycle')
+      sleeper.wakeNow() // 대기 중이면 즉시 깨워 유예 시간 안에 빠져나간다
+    })
+  }
   log.info('worker started')
 
-  for (;;) {
+  while (!shuttingDown) {
     const now = new Date()
     const kstDate = kstDateString(now)
 
@@ -3193,28 +3370,48 @@ async function main(): Promise<void> {
         log.info({ ingest, dispatch, used }, 'cycle')
       }
 
-      // 자정이 지나면 전날 다이제스트를 보낸다
-      if (kstDate !== lastDigestDate) {
+      // 자정이 지나면 밀린 날짜를 하루씩 모두 보낸다. `= kstDate` 로 건너뛰면
+      // 장애가 자정을 두 번 넘겼을 때 중간 날의 다이제스트가 영영 사라진다 —
+      // 다이제스트는 운영자의 유일한 사후 감사 기록이므로 누락되면 안 된다.
+      // `!==` 로 두면 안 된다: 시계 스큐나 오래된 상태로 재시작해 lastDigestDate 가
+      // 현재보다 앞서 있으면 조건이 영원히 거짓이 되지 않아 다이제스트를 무한 발송한다.
+      // ISO 날짜 문자열은 사전순 비교가 날짜 순서와 일치한다.
+      while (lastDigestDate < kstDate) {
         await runDigest({ store, notifier, sourceId: source.id }, lastDigestDate)
-        lastDigestDate = kstDate
+        lastDigestDate = nextKstDate(lastDigestDate)
       }
 
-      await heartbeat.ping()
-
       const base = budgetGuard(used, pollIntervalMs(now))
-      await sleep(base)
+      await sleeper.sleep(base)
     } catch (err) {
       circuit.recordFailure()
       const failures = circuit.consecutiveFailures()
       log.error({ err, failures }, 'cycle failed')
 
-      if (failures === ALERT_THRESHOLD) {
-        await notifier.send(`⚠️ 워커 연속 실패 ${failures}회`).catch(() => {})
+      // `=== ALERT_THRESHOLD` 로 두면 안 된다: 전면 장애(DART·텔레그램 동시 불통) 시
+      // 5회째의 단 한 번뿐인 발송이 조용히 실패하고 failures 는 6,7,8... 로 올라가
+      // 다시 5가 되지 않으므로 장애 전 구간에 알림이 0건 간다.
+      if (failures >= ALERT_THRESHOLD && failures % ALERT_THRESHOLD === 0) {
+        await notifier.send(
+          `⚠️ 워커 연속 실패 ${failures}회` +
+          (heartbeatFailures > 0 ? `\n⚠️ heartbeat 미확인 ${heartbeatFailures}회 — 감시망 점검 필요` : ''),
+        ).catch(() => {})
       }
 
-      await sleep(pollIntervalMs(new Date()) * circuit.intervalMultiplier())
+      await sleeper.sleep(pollIntervalMs(new Date()) * circuit.intervalMultiplier())
+    } finally {
+      // heartbeat 은 반드시 finally 에 둔다. "프로세스가 살아 루프를 돌고 있는가"에
+      // 답하는 신호이고, 그 답은 DART 성공 여부와 무관하기 때문이다.
+      // try 안에 두면 DART 장애 중 워커가 멀쩡히 백오프하는 동안에도 핑이 끊겨
+      // 외부 감시가 "VM 사망"으로 오판하고, 사람이 고칠 수 없고 저절로 낫는 일로
+      // 운영자를 호출하게 된다. DART 실패는 서킷 브레이커 알림이 담당한다.
+      // ping() 은 절대 throw 하지 않으므로 finally 에서 안전하다.
+      heartbeatFailures = (await heartbeat.ping()) ? 0 : heartbeatFailures + 1
     }
   }
+
+  log.info('shutdown complete')
+  process.exit(0)
 }
 
 // crash-only: 예외를 삼키고 도는 것보다 죽고 재시작하는 편이 안전하다
@@ -3237,6 +3434,11 @@ main().catch((err) => {
 
 Run: `pnpm test && pnpm typecheck`
 Expected: 전부 PASS
+
+또한 **워커가 실제로 기동하는지** 확인한다 (테스트 통과가 이를 보장하지 않는다):
+
+Run: `cd apps/worker && pnpm exec tsc -p tsconfig.json && DATABASE_URL=x DART_API_KEY=$(printf 'k%.0s' {1..40}) TELEGRAM_BOT_TOKEN=t TELEGRAM_CHAT_ID=1 LLM_API_KEY=l node dist/main.js`
+Expected: 설정 파싱과 모듈 로드를 통과해 실행에 들어간다 (DB 연결 실패로 죽는 것은 정상 — `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 나 zod 설정 오류가 **아니어야** 한다). 확인 후 Ctrl-C.
 
 - [ ] **Step 6: 커밋**
 
@@ -3263,10 +3465,10 @@ git commit -m "feat: 설정 로더와 메인 루프 조립"
 
 `apps/worker/Dockerfile` (레포 루트를 빌드 컨텍스트로 사용):
 ```dockerfile
-FROM node:22-slim AS build
+FROM node:24-slim AS build
 WORKDIR /app
 RUN corepack enable
-COPY pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/worker/package.json apps/worker/
 RUN pnpm install --frozen-lockfile
@@ -3274,10 +3476,9 @@ COPY packages/shared packages/shared
 COPY apps/worker apps/worker
 RUN pnpm --filter @app/worker exec tsc -p tsconfig.json
 
-FROM node:22-slim
+FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist
@@ -3382,6 +3583,29 @@ git commit -m "feat: Docker 이미지와 OCI 배포 문서"
 
 ---
 
+---
+
+### Task 18: DART 문서 본문 조회 어댑터
+
+**왜 이 태스크가 뒤늦게 추가되었나:** 스펙 §7.3 은 `high`/`normal` 공시의 **본문**을 별도 문서 API로 조회해 요약·정량추출·비율계산을 하라고 요구한다. 그런데 Task 1~17 어디에도 본문 조회가 없어, LLM 이 공시 **제목만** 보고 요약하는 상태로 끝난다. 그 결과 스펙이 내세운 차별화("계약금액 500억 = 연매출의 23%")가 원천적으로 불가능하다. 계획 작성 시의 누락이며 Task 12 리뷰에서 발견되었다.
+
+**Files:**
+- Create: `apps/worker/src/ports/document.ts`
+- Create: `apps/worker/src/adapters/document/dart-document.ts`
+- Modify: `apps/worker/src/adapters/summarizer/llm.ts` (본문을 받도록 user 메시지 확장, 프롬프트 원복)
+- Test: `apps/worker/src/adapters/document/dart-document.test.ts`
+
+**핵심 난점:** OpenDART 의 `document.json` 엔드포인트는 **ZIP 바이너리**를 반환하고 그 안에 XML 이 들어 있다. 압축 해제 + XML 파싱 + 본문 텍스트 추출이 필요하다. 의존성을 하나 추가해야 하며(예: `fflate`), 추가 API 호출이 일 수십 건 발생하므로 예산 가드에 반영해야 한다.
+
+**선행 확인 (실측 필수, 추정 금지):**
+- `document.json` 의 실제 응답 형식과 ZIP 내부 구조
+- 본문 XML 에서 의미 있는 텍스트를 뽑는 방법 (공시 유형마다 구조가 다름)
+- 이 호출이 일 20,000 건 예산에 미치는 영향
+
+**완료 조건:** `high`/`normal` 공시에 대해 본문 기반 요약이 생성되고, 제목만 있을 때와 결과가 눈에 띄게 다름을 실제 공시로 확인한다. 확인 전까지 Task 12 의 제목 기반 프롬프트를 유지한다.
+
+---
+
 ## 실행 후 할 일 (코드 밖 작업)
 
 계획 실행이 끝나면 다음을 수동으로 진행한다. 이것들은 코드가 아니라 운영 절차다.
@@ -3394,5 +3618,8 @@ git commit -m "feat: Docker 이미지와 OCI 배포 문서"
    - DART 접수 → API 노출 지연
    - 텔레그램 rate limit 실제 수치
    - LLM 건당 실제 비용
-6. **골든셋 구축** — 수집된 실제 공시에서 대표 100건을 `golden.json`으로 고정하고 회귀 테스트를 추가한다
-7. **공개 채널 전환** — 룰이 납득되고 rate limit 대응이 검증된 뒤에만
+6. **키워드 커버리지 보강 (Task 4 리뷰에서 제기된 갭)** — 다이제스트의 `no-keyword-match` 목록에서 아래 유형의 **실제 `report_nm` 문자열을 정확히 확인해** `CRITICAL_KEYWORDS`/`HIGH_KEYWORDS`에 추가한다. 추측으로 미리 넣지 않는 이유는, 실제 제목과 한 글자라도 다르면 매칭되지 않는 죽은 문자열이 되어 "커버된 것처럼 보이는" 더 위험한 상태가 되기 때문이다.
+   - **취득/처분 비대칭 해소**: 현재 목록은 `자기주식취득결정`·`타법인주식및출자증권취득결정`만 잡고 **처분·소각 쪽을 전부 놓친다**. `자기주식처분결정`, `자기주식소각결정`, `타법인주식및출자증권처분결정` 계열 확인 필요. (자사주 소각은 강한 주가 재료다.)
+   - 그 외 후보: `유형자산 양수/양도 결정`, `소송 등의 제기` 계열
+7. **골든셋 구축** — 수집된 실제 공시에서 대표 100건을 `golden.json`으로 고정하고 회귀 테스트를 추가한다
+8. **공개 채널 전환** — 룰이 납득되고 rate limit 대응이 검증된 뒤에만

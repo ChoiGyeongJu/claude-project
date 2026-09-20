@@ -5,3 +5,10 @@ dist/
 !.env.example
 *.log
 .DS_Store
+.serena/
+.superpowers/
+
+# 비밀값이 든 env 파일. 배포 문서가 worker.env 를 쓰라고 안내하는데
+# .env / .env.* 패턴으로는 걸리지 않아 공개 레포에 그대로 커밋될 수 있었다.
+*.env
+!.env.example

@@ -1,0 +1,9 @@
+{
+  "name": "@app/shared",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./src/event.ts",
+  "exports": { ".": "./src/event.ts" },
+  "scripts": { "test": "vitest run --passWithNoTests", "typecheck": "tsc --noEmit" },
+  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0" }
+}

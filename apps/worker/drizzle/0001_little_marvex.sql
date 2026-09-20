@@ -1,0 +1,2 @@
+CREATE INDEX "events_first_seen_at_idx" ON "events" USING btree ("first_seen_at");--> statement-breakpoint
+CREATE INDEX "outbox_status_next_attempt_idx" ON "outbox" USING btree ("status","next_attempt_at");

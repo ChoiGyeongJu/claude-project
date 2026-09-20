@@ -1,0 +1,113 @@
+import { formatEvent, formatMerged } from '../core/format.js'
+import { MAX_MERGED_CHARS, MERGE_THRESHOLD } from '../core/policy.js'
+import { MAX_ATTEMPTS, nextAttemptAt } from '../core/retry.js'
+import { LOCAL_RATE_LIMIT } from '../ports/notifier.js'
+import type { Notifier } from '../ports/notifier.js'
+import type { EventStore, PendingOutbox } from '../ports/store.js'
+import type { Summarizer } from '../ports/summarizer.js'
+
+export type DispatchDeps = {
+  store: EventStore
+  notifier: Notifier
+  summarizer: Summarizer
+}
+
+export type DispatchStats = { sent: number; failed: number; dead: number; expired: number }
+
+const CLAIM_LIMIT = 20
+
+export async function runDispatch(deps: DispatchDeps, now: Date): Promise<DispatchStats> {
+  const stats: DispatchStats = { sent: 0, failed: 0, dead: 0, expired: 0 }
+  const claimed = await deps.store.claimPending(now, CLAIM_LIMIT)
+  if (claimed.length === 0) return stats
+
+  // 만료 먼저 걷어낸다 — 늦은 알림은 보내지 않는다
+  const live: PendingOutbox[] = []
+  for (const item of claimed) {
+    if (item.expiresAt.getTime() <= now.getTime()) {
+      await deps.store.markDead(item.id, 'expired')
+      stats.expired += 1
+    } else {
+      live.push(item)
+    }
+  }
+
+  const criticals = live.filter((i) => i.tier === 'critical')
+  const others = live.filter((i) => i.tier !== 'critical')
+
+  // critical — 속도가 목적이므로 병합하지 않는다
+  for (const item of criticals) {
+    await sendOne(deps, item, formatEvent(item.event, item.tier), now, stats)
+  }
+
+  // 그 외 — 임계 이상이면 한 메시지로 묶어 rate limit 압박을 줄인다.
+  // 병합 메시지는 요약을 붙이지 않는다 — 개별 발송과 달리 알림에 요약이 있는지 여부가
+  // "마침 그때 몇 건이 밀려 있었는가"로 결정되는 것은 의도된 지연·길이 트레이드오프다.
+  if (others.length >= MERGE_THRESHOLD) {
+    // MAX_MERGED_CHARS를 넘기 전까지만 배치에 담는다 — 텔레그램 4096자 한도를 넘기면
+    // 배치 전체가 거부되어 안의 항목이 모두 같이 죽는다. 담기지 못한 항목은 아무 store
+    // 호출도 받지 않고 pending으로 남아 다음 사이클에 다시 claim된다 — 유실되지 않는다.
+    const batch: PendingOutbox[] = []
+    for (const item of others) {
+      const next = [...batch, item]
+      if (formatMerged(next.map((i) => ({ event: i.event, tier: i.tier }))).length > MAX_MERGED_CHARS) break
+      batch.push(item)
+    }
+    const text = formatMerged(batch.map((i) => ({ event: i.event, tier: i.tier })))
+    const res = await deps.notifier.send(text)
+    for (const item of batch) await applyResult(deps, item, res, now, stats)
+  } else {
+    for (const item of others) {
+      const summary = await deps.summarizer.summarize(item.event)
+      const text = formatEvent(item.event, item.tier, summary ?? undefined)
+      await sendOne(deps, item, text, now, stats)
+    }
+  }
+
+  return stats
+}
+
+async function sendOne(
+  deps: DispatchDeps, item: PendingOutbox, text: string, now: Date, stats: DispatchStats,
+): Promise<void> {
+  const res = await deps.notifier.send(text)
+  await applyResult(deps, item, res, now, stats)
+}
+
+async function applyResult(
+  deps: DispatchDeps,
+  item: PendingOutbox,
+  res: Awaited<ReturnType<Notifier['send']>>,
+  now: Date,
+  stats: DispatchStats,
+): Promise<void> {
+  // 발송은 at-least-once다. 하나의 send() 호출이 병합 배치라면 N개 항목을 대표한다 —
+  // 텔레그램이 메시지를 실제로 받았는데 우리가 그 응답만 못 받으면, 우리는 실패로 보고
+  // N개 전부를 재시도해 중복 발송할 수 있다. 텔레그램 Bot API에는 idempotency key가
+  // 없어 이 경로를 원천적으로 없앨 수는 없다 — "확인된 성공에만 markSent" 는 의도된
+  // 선택이다: 알림 서비스에서는 중복이 누락보다 낫다.
+  if (res.ok) {
+    await deps.store.markSent(item.id)
+    stats.sent += 1
+    return
+  }
+
+  // 우리가 스스로 조절해서 안 보낸 것은 실패가 아니다 — 시도 횟수를 소비하면
+  // 버스트 때 자가 스로틀링만으로 재시도 예산이 바닥나 정상 알림이 버려진다.
+  const throttled = res.error === LOCAL_RATE_LIMIT
+  const attempts = throttled ? item.attempts : item.attempts + 1
+
+  if (!throttled && attempts >= MAX_ATTEMPTS) {
+    await deps.store.markDead(item.id, res.error)
+    stats.dead += 1
+    return
+  }
+
+  // 429의 retry_after는 추측하지 않고 그대로 따른다
+  const next = res.retryAfterMs !== null
+    ? new Date(now.getTime() + res.retryAfterMs)
+    : nextAttemptAt(item.attempts, now)
+
+  await deps.store.markFailed(item.id, res.error, next, attempts)
+  stats.failed += 1
+}
