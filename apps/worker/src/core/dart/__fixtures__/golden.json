@@ -1,0 +1,2323 @@
+[
+  {
+    "note": "U+00B7(가운뎃점 ·) 표기의 횡령·배임 — 실측에는 2건뿐이다. critical 키워드가 high(조회공시요구)보다 우선한다는 것도 함께 보여준다.",
+    "item": {
+      "report_nm": "조회공시요구(풍문또는보도)              (현직 임원의 횡령·배임혐의설)",
+      "corp_cls": "K",
+      "stock_code": "031860",
+      "corp_name": "디에이치엑스컴퍼니",
+      "rcept_no": "20260904900759",
+      "rcept_dt": "20260904",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:횡령·배임"
+    }
+  },
+  {
+    "note": "U+318D(한글 자모 아래아 ㆍ) 표기의 횡령ㆍ배임 — DART가 실제로 압도적으로 많이 쓰는 표기(실측 7건 중 하나). canonicalizeTitle이 두 표기를 keyword:횡령·배임 하나로 수렴시킨다.",
+    "item": {
+      "report_nm": "횡령ㆍ배임혐의진행사항              ",
+      "corp_cls": "K",
+      "stock_code": "094850",
+      "corp_name": "참좋은여행",
+      "rcept_no": "20260827900652",
+      "rcept_dt": "20260827",
+      "flr_nm": "참좋은여행",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:횡령·배임"
+    }
+  },
+  {
+    "note": "기계적 매매정지 — 주식의 병합, 분할 등 전자등록 변경. MECHANICAL_HALT_MARKERS에 걸려 critical에서 normal로 낮아진다.",
+    "item": {
+      "report_nm": "주권매매거래정지              (주식의 병합, 분할 등 전자등록 변경, 말소)",
+      "corp_cls": "K",
+      "stock_code": "038530",
+      "corp_name": "케이바이오랩스",
+      "rcept_no": "20260824900637",
+      "rcept_dt": "20260824",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:거래정지"
+    }
+  },
+  {
+    "note": "기계적 매매정지 — 액면병합 변경상장. 마찬가지로 normal로 낮아진다.",
+    "item": {
+      "report_nm": "주권매매거래정지해제              (액면병합 주권 변경상장)",
+      "corp_cls": "K",
+      "stock_code": "060570",
+      "corp_name": "드림어스컴퍼니",
+      "rcept_no": "20260824900335",
+      "rcept_dt": "20260824",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:거래정지"
+    }
+  },
+  {
+    "note": "실제 이상 신호 — 매매거래정지및정지해제(중요내용공시). 마커가 없으므로 거래정지 특례를 타지 않고 critical로 남는다.",
+    "item": {
+      "report_nm": "매매거래정지및정지해제(중요내용공시)              ",
+      "corp_cls": "Y",
+      "stock_code": "361610",
+      "corp_name": "SK아이이테크놀로지",
+      "rcept_no": "20260825800591",
+      "rcept_dt": "20260825",
+      "flr_nm": "유가증권시장본부",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:거래정지"
+    }
+  },
+  {
+    "note": "실제 이상 신호 — 상장적격성 실질심사 대상(사유발생)에 따른 거래정지기간변경. critical 유지. CRITICAL_KEYWORDS에서 실질심사가 거래정지 바로 뒤에 있어 라벨이 keyword:거래정지로 남는다.",
+    "item": {
+      "report_nm": "주권매매거래정지기간변경              (상장적격성 실질심사 대상(사유발생))",
+      "corp_cls": "K",
+      "stock_code": "065420",
+      "corp_name": "에스아이리소스",
+      "rcept_no": "20260828900980",
+      "rcept_dt": "20260828",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:거래정지"
+    }
+  },
+  {
+    "note": "실제 이상 신호 — 상장폐지사유 발생에 따른 거래정지. \"상장폐지\"가 배열에서 \"거래정지\"보다 먼저 오므로 rule은 keyword:상장폐지로 잡히지만(정리매매/상장폐지 사유는 거래정지 특례를 아예 타지 않는다), tier는 여전히 critical — 과제에서 강조한 \"정리매매/상장폐지 사유는 critical 유지\" 요건의 실측 사례다.",
+    "item": {
+      "report_nm": "주권매매거래정지              (상장폐지사유 발생)",
+      "corp_cls": "K",
+      "stock_code": "008290",
+      "corp_name": "원풍물산",
+      "rcept_no": "20260908900687",
+      "rcept_dt": "20260908",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:상장폐지"
+    }
+  },
+  {
+    "note": "게이트 순서 회귀 (1/5) — 최대주주등소유주식변동신고서(최대주주변경시)는 NOISE_PATTERNS(최대주주등소유주식변동신고서)와 CRITICAL_KEYWORDS(최대주주변경) 둘 다에 걸린다. 키워드 게이트(6)가 노이즈 게이트(5)보다 먼저 실행되어 critical로 살아남는다.",
+    "item": {
+      "report_nm": "최대주주등소유주식변동신고서(최대주주변경시)              ",
+      "corp_cls": "Y",
+      "stock_code": "381970",
+      "corp_name": "케이카",
+      "rcept_no": "20260901800102",
+      "rcept_dt": "20260901",
+      "flr_nm": "케이카",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:최대주주변경"
+    }
+  },
+  {
+    "note": "게이트 순서 회귀 (2/5) — 위와 동일 패턴, 다른 회사.",
+    "item": {
+      "report_nm": "최대주주등소유주식변동신고서(최대주주변경시)              ",
+      "corp_cls": "Y",
+      "stock_code": "004770",
+      "corp_name": "써니전자",
+      "rcept_no": "20260902800277",
+      "rcept_dt": "20260902",
+      "flr_nm": "써니전자",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:최대주주변경"
+    }
+  },
+  {
+    "note": "게이트 순서 회귀 (3/5) — 위와 동일 패턴, 다른 회사. 실측 3건 전부를 여기 핀으로 고정한다.",
+    "item": {
+      "report_nm": "최대주주등소유주식변동신고서(최대주주변경시)              ",
+      "corp_cls": "Y",
+      "stock_code": "214420",
+      "corp_name": "토니모리",
+      "rcept_no": "20260903800415",
+      "rcept_dt": "20260903",
+      "flr_nm": "토니모리",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:최대주주변경"
+    }
+  },
+  {
+    "note": "게이트 순서 회귀 (4/5) — 임시주주총회소집결의 철회 공시에 회사합병 결정이 섞여 있다. NOISE_PATTERNS(주주총회소집결의)와 CRITICAL_KEYWORDS(회사합병결정) 둘 다에 걸리지만 키워드가 이긴다.",
+    "item": {
+      "report_nm": "기타주요경영사항(자회사의 주요경영사항)              (회사합병 결정 및 임시주주총회 소집결의 철회)",
+      "corp_cls": "K",
+      "stock_code": "084110",
+      "corp_name": "휴온스글로벌",
+      "rcept_no": "20260826900708",
+      "rcept_dt": "20260826",
+      "flr_nm": "휴온스글로벌",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회사합병결정"
+    }
+  },
+  {
+    "note": "게이트 순서 회귀 (5/5) — 위와 동일 패턴, 다른 회사. 실측 2건 전부를 여기 핀으로 고정한다.",
+    "item": {
+      "report_nm": "기타주요경영사항              (회사합병 결정 및 임시주주총회 소집결의 철회)",
+      "corp_cls": "K",
+      "stock_code": "243070",
+      "corp_name": "휴온스",
+      "rcept_no": "20260826900701",
+      "rcept_dt": "20260826",
+      "flr_nm": "휴온스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회사합병결정"
+    }
+  },
+  {
+    "note": "[기재정정] 접두어 — 본문에 단일판매·공급계약체결(critical 키워드)이 있어도 정정 접두어가 먼저 걸려 drop(minor-correction)된다. 정정 게이트(4)가 키워드 게이트(6)보다 먼저 실행된다는 증거.",
+    "item": {
+      "report_nm": "[기재정정]단일판매ㆍ공급계약체결              ",
+      "corp_cls": "Y",
+      "stock_code": "019490",
+      "corp_name": "엑시큐어하이트론",
+      "rcept_no": "20260824800722",
+      "rcept_dt": "20260824",
+      "flr_nm": "엑시큐어하이트론",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "minor-correction"
+    }
+  },
+  {
+    "note": "[첨부정정] 접두어 — 본문에 회사합병결정(critical 키워드)이 있어도 마찬가지로 drop(minor-correction). 카카오 실사례.",
+    "item": {
+      "report_nm": "[첨부정정]주요사항보고서(회사합병결정)",
+      "corp_cls": "Y",
+      "stock_code": "035720",
+      "corp_name": "카카오",
+      "rcept_no": "20260824000219",
+      "rcept_dt": "20260824",
+      "flr_nm": "카카오",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "minor-correction"
+    }
+  },
+  {
+    "note": "[첨부추가] 접두어 — drop(minor-correction). 세 정정 접두어(기재정정/첨부정정/첨부추가) 중 마지막.",
+    "item": {
+      "report_nm": "[첨부추가]기업설명회(IR)개최(안내공시)              ",
+      "corp_cls": "Y",
+      "stock_code": "361610",
+      "corp_name": "SK아이이테크놀로지",
+      "rcept_no": "20260825800659",
+      "rcept_dt": "20260825",
+      "flr_nm": "SK아이이테크놀로지",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "minor-correction"
+    }
+  },
+  {
+    "note": "[정정명령부과] 접두어 — critical로 통과한다 (실측 1건뿐). 이중 대괄호([정정명령부과][첨부정정])에서 splitPrefix는 첫 번째 대괄호만 벗겨내므로 정정명령부과가 이긴다 — 이 프로젝트가 강조하는 \"정정명령부과가 정기보고서 판정보다 먼저\"와 같은 이유로, 뒤에 남은 [첨부정정]은 더 이상 검사되지 않는다.",
+    "item": {
+      "report_nm": "[정정명령부과][첨부정정]주요사항보고서(회사합병결정)",
+      "corp_cls": "Y",
+      "stock_code": "361610",
+      "corp_name": "SK아이이테크놀로지",
+      "rcept_no": "20260826000752",
+      "rcept_dt": "20260826",
+      "flr_nm": "SK아이이테크놀로지",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "prefix:정정명령부과"
+    }
+  },
+  {
+    "note": "[정정제출요구] 접두어 — critical로 통과 (실측 5건 중 하나: SK이노베이션).",
+    "item": {
+      "report_nm": "[정정제출요구]증권신고서(합병)",
+      "corp_cls": "Y",
+      "stock_code": "096770",
+      "corp_name": "SK이노베이션",
+      "rcept_no": "20260826000056",
+      "rcept_dt": "20260826",
+      "flr_nm": "SK이노베이션",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "prefix:정정제출요구"
+    }
+  },
+  {
+    "note": "[정정제출요구] 접두어 — critical로 통과 (실측 5건 중 하나: 엣지파운드리). 이중 대괄호(정정제출요구+기재정정)에서도 첫 번째만 본다.",
+    "item": {
+      "report_nm": "[정정제출요구][기재정정]증권신고서(지분증권)",
+      "corp_cls": "K",
+      "stock_code": "105550",
+      "corp_name": "엣지파운드리",
+      "rcept_no": "20260827000991",
+      "rcept_dt": "20260827",
+      "flr_nm": "엣지파운드리",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "prefix:정정제출요구"
+    }
+  },
+  {
+    "note": "[정정제출요구] 접두어 — critical로 통과 (실측 5건 중 하나: 큐리언트).",
+    "item": {
+      "report_nm": "[정정제출요구]증권신고서(지분증권)",
+      "corp_cls": "K",
+      "stock_code": "115180",
+      "corp_name": "큐리언트",
+      "rcept_no": "20260904000207",
+      "rcept_dt": "20260904",
+      "flr_nm": "큐리언트",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "prefix:정정제출요구"
+    }
+  },
+  {
+    "note": "[발행조건확정] 접두어 — high로 통과 (실측 34건 중 하나: 스카이랩스, [발행조건확정]증권신고서(지분증권)).",
+    "item": {
+      "report_nm": "[발행조건확정]증권신고서(지분증권)",
+      "corp_cls": "K",
+      "stock_code": "386380",
+      "corp_name": "스카이랩스",
+      "rcept_no": "20260825000417",
+      "rcept_dt": "20260825",
+      "flr_nm": "스카이랩스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "prefix:발행조건확정"
+    }
+  },
+  {
+    "note": "[발행조건확정] 접두어 — high로 통과 (실측 34건 중 하나: KB금융, [발행조건확정]증권신고서(채무증권)).",
+    "item": {
+      "report_nm": "[발행조건확정]증권신고서(채무증권)",
+      "corp_cls": "Y",
+      "stock_code": "105560",
+      "corp_name": "KB금융",
+      "rcept_no": "20260825000482",
+      "rcept_dt": "20260825",
+      "flr_nm": "KB금융",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "prefix:발행조건확정"
+    }
+  },
+  {
+    "note": "[발행조건확정] 접두어 — high로 통과 (실측 34건 중 하나: 엔에이치스팩34호, [발행조건확정]증권신고서(지분증권)).",
+    "item": {
+      "report_nm": "[발행조건확정]증권신고서(지분증권)",
+      "corp_cls": "K",
+      "stock_code": "0197V0",
+      "corp_name": "엔에이치스팩34호",
+      "rcept_no": "20260828000881",
+      "rcept_dt": "20260828",
+      "flr_nm": "엔에이치스팩34호",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "prefix:발행조건확정"
+    }
+  },
+  {
+    "note": "keyword:단일판매·공급계약체결 critical (실측 161건 중 하나: 엘에스일렉트릭).",
+    "item": {
+      "report_nm": "단일판매ㆍ공급계약체결              ",
+      "corp_cls": "Y",
+      "stock_code": "010120",
+      "corp_name": "엘에스일렉트릭",
+      "rcept_no": "20260824800095",
+      "rcept_dt": "20260824",
+      "flr_nm": "엘에스일렉트릭",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:단일판매·공급계약체결"
+    }
+  },
+  {
+    "note": "keyword:단일판매·공급계약체결 critical (실측 161건 중 하나: LS).",
+    "item": {
+      "report_nm": "단일판매ㆍ공급계약체결(자회사의 주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "006260",
+      "corp_name": "LS",
+      "rcept_no": "20260824800100",
+      "rcept_dt": "20260824",
+      "flr_nm": "LS",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:단일판매·공급계약체결"
+    }
+  },
+  {
+    "note": "keyword:단일판매·공급계약체결 critical (실측 161건 중 하나: DL이앤씨).",
+    "item": {
+      "report_nm": "단일판매ㆍ공급계약체결              ",
+      "corp_cls": "Y",
+      "stock_code": "375500",
+      "corp_name": "DL이앤씨",
+      "rcept_no": "20260824800113",
+      "rcept_dt": "20260824",
+      "flr_nm": "DL이앤씨",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:단일판매·공급계약체결"
+    }
+  },
+  {
+    "note": "keyword:무상증자결정 critical (실측 전부 2건).",
+    "item": {
+      "report_nm": "주요사항보고서(무상증자결정)",
+      "corp_cls": "K",
+      "stock_code": "475460",
+      "corp_name": "미트박스",
+      "rcept_no": "20260902000056",
+      "rcept_dt": "20260902",
+      "flr_nm": "미트박스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:무상증자결정"
+    }
+  },
+  {
+    "note": "keyword:무상증자결정 critical (실측 전부 2건).",
+    "item": {
+      "report_nm": "주요사항보고서(무상증자결정)",
+      "corp_cls": "K",
+      "stock_code": "052400",
+      "corp_name": "코나아이",
+      "rcept_no": "20260914000031",
+      "rcept_dt": "20260914",
+      "flr_nm": "코나아이",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:무상증자결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득결정 critical (실측 18건 중 하나: 세진티에스).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득결정)",
+      "corp_cls": "K",
+      "stock_code": "067770",
+      "corp_name": "세진티에스",
+      "rcept_no": "20260825000245",
+      "rcept_dt": "20260825",
+      "flr_nm": "세진티에스",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득결정 critical (실측 18건 중 하나: 진양화학).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득결정)",
+      "corp_cls": "Y",
+      "stock_code": "051630",
+      "corp_name": "진양화학",
+      "rcept_no": "20260825000332",
+      "rcept_dt": "20260825",
+      "flr_nm": "진양화학",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득결정 critical (실측 18건 중 하나: 진양폴리우레탄).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득결정)",
+      "corp_cls": "Y",
+      "stock_code": "010640",
+      "corp_name": "진양폴리우레탄",
+      "rcept_no": "20260825000437",
+      "rcept_dt": "20260825",
+      "flr_nm": "진양폴리우레탄",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득신탁계약체결결정 critical (실측 26건 중 하나: 일진홀딩스).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득신탁계약체결결정)",
+      "corp_cls": "Y",
+      "stock_code": "015860",
+      "corp_name": "일진홀딩스",
+      "rcept_no": "20260824000072",
+      "rcept_dt": "20260824",
+      "flr_nm": "일진홀딩스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득신탁계약체결결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득신탁계약체결결정 critical (실측 26건 중 하나: 이건산업).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득신탁계약체결결정)",
+      "corp_cls": "Y",
+      "stock_code": "008250",
+      "corp_name": "이건산업",
+      "rcept_no": "20260824000155",
+      "rcept_dt": "20260824",
+      "flr_nm": "이건산업",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득신탁계약체결결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득신탁계약체결결정 critical (실측 26건 중 하나: 이건홀딩스).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득신탁계약체결결정)(자회사의 주요경영사항)              ",
+      "corp_cls": "K",
+      "stock_code": "039020",
+      "corp_name": "이건홀딩스",
+      "rcept_no": "20260824900328",
+      "rcept_dt": "20260824",
+      "flr_nm": "이건홀딩스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득신탁계약체결결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식처분결정 critical (실측 13건 중 하나: 제놀루션) — 취득만 있고 처분이 빠져 있던 튜닝 이전 사각지대.",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식처분결정)",
+      "corp_cls": "K",
+      "stock_code": "225220",
+      "corp_name": "제놀루션",
+      "rcept_no": "20260824000179",
+      "rcept_dt": "20260824",
+      "flr_nm": "제놀루션",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식처분결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식처분결정 critical (실측 13건 중 하나: 하이브) — 취득만 있고 처분이 빠져 있던 튜닝 이전 사각지대.",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식처분결정)",
+      "corp_cls": "Y",
+      "stock_code": "352820",
+      "corp_name": "하이브",
+      "rcept_no": "20260825000350",
+      "rcept_dt": "20260825",
+      "flr_nm": "하이브",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식처분결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식처분결정 critical (실측 13건 중 하나: SK) — 취득만 있고 처분이 빠져 있던 튜닝 이전 사각지대.",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식처분결정)",
+      "corp_cls": "Y",
+      "stock_code": "034730",
+      "corp_name": "SK",
+      "rcept_no": "20260825000473",
+      "rcept_dt": "20260825",
+      "flr_nm": "SK",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식처분결정"
+    }
+  },
+  {
+    "note": "keyword:주식소각결정 critical (실측 44건 중 하나: 지에프씨생명과학) — '자기주식소각결정'은 실측 0건, DART 실표기 '주식소각결정'만 존재한다(Finding 2).",
+    "item": {
+      "report_nm": "주식소각결정              ",
+      "corp_cls": "K",
+      "stock_code": "388610",
+      "corp_name": "지에프씨생명과학",
+      "rcept_no": "20260824900193",
+      "rcept_dt": "20260824",
+      "flr_nm": "지에프씨생명과학",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:주식소각결정"
+    }
+  },
+  {
+    "note": "keyword:주식소각결정 critical (실측 44건 중 하나: 에이치피오) — '자기주식소각결정'은 실측 0건, DART 실표기 '주식소각결정'만 존재한다(Finding 2).",
+    "item": {
+      "report_nm": "주식소각결정              ",
+      "corp_cls": "K",
+      "stock_code": "357230",
+      "corp_name": "에이치피오",
+      "rcept_no": "20260824900455",
+      "rcept_dt": "20260824",
+      "flr_nm": "에이치피오",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:주식소각결정"
+    }
+  },
+  {
+    "note": "keyword:주식소각결정 critical (실측 44건 중 하나: MH에탄올) — '자기주식소각결정'은 실측 0건, DART 실표기 '주식소각결정'만 존재한다(Finding 2).",
+    "item": {
+      "report_nm": "주식소각결정              ",
+      "corp_cls": "Y",
+      "stock_code": "023150",
+      "corp_name": "MH에탄올",
+      "rcept_no": "20260825800183",
+      "rcept_dt": "20260825",
+      "flr_nm": "MH에탄올",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:주식소각결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득신탁계약해지결정 critical (실측 23건 중 하나: 코메론).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득신탁계약해지결정)",
+      "corp_cls": "K",
+      "stock_code": "049430",
+      "corp_name": "코메론",
+      "rcept_no": "20260825000160",
+      "rcept_dt": "20260825",
+      "flr_nm": "코메론",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득신탁계약해지결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득신탁계약해지결정 critical (실측 23건 중 하나: 젝시믹스).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득신탁계약해지결정)",
+      "corp_cls": "K",
+      "stock_code": "337930",
+      "corp_name": "젝시믹스",
+      "rcept_no": "20260827000241",
+      "rcept_dt": "20260827",
+      "flr_nm": "젝시믹스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득신탁계약해지결정"
+    }
+  },
+  {
+    "note": "keyword:자기주식취득신탁계약해지결정 critical (실측 23건 중 하나: 메리츠금융지주).",
+    "item": {
+      "report_nm": "주요사항보고서(자기주식취득신탁계약해지결정)",
+      "corp_cls": "Y",
+      "stock_code": "138040",
+      "corp_name": "메리츠금융지주",
+      "rcept_no": "20260828001496",
+      "rcept_dt": "20260828",
+      "flr_nm": "메리츠금융지주",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:자기주식취득신탁계약해지결정"
+    }
+  },
+  {
+    "note": "keyword:유상증자결정 critical (실측 78건 중 하나: 넥사다이내믹스).",
+    "item": {
+      "report_nm": "주요사항보고서(유상증자결정)",
+      "corp_cls": "K",
+      "stock_code": "351320",
+      "corp_name": "넥사다이내믹스",
+      "rcept_no": "20260824000320",
+      "rcept_dt": "20260824",
+      "flr_nm": "넥사다이내믹스",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:유상증자결정"
+    }
+  },
+  {
+    "note": "keyword:유상증자결정 critical (실측 78건 중 하나: LG생활건강).",
+    "item": {
+      "report_nm": "유상증자결정(종속회사의주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "051900",
+      "corp_name": "LG생활건강",
+      "rcept_no": "20260824800483",
+      "rcept_dt": "20260824",
+      "flr_nm": "LG생활건강",
+      "rm": "유정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:유상증자결정"
+    }
+  },
+  {
+    "note": "keyword:유상증자결정 critical (실측 78건 중 하나: 육일씨엔에쓰).",
+    "item": {
+      "report_nm": "주요사항보고서(유상증자결정)",
+      "corp_cls": "K",
+      "stock_code": "191410",
+      "corp_name": "육일씨엔에쓰",
+      "rcept_no": "20260826000431",
+      "rcept_dt": "20260826",
+      "flr_nm": "육일씨엔에쓰",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:유상증자결정"
+    }
+  },
+  {
+    "note": "keyword:전환사채권발행결정 critical (실측 31건 중 하나: 그리드위즈).",
+    "item": {
+      "report_nm": "주요사항보고서(전환사채권발행결정)",
+      "corp_cls": "K",
+      "stock_code": "453450",
+      "corp_name": "그리드위즈",
+      "rcept_no": "20260824000164",
+      "rcept_dt": "20260824",
+      "flr_nm": "그리드위즈",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:전환사채권발행결정"
+    }
+  },
+  {
+    "note": "keyword:전환사채권발행결정 critical (실측 31건 중 하나: 서진시스템).",
+    "item": {
+      "report_nm": "주요사항보고서(전환사채권발행결정)",
+      "corp_cls": "K",
+      "stock_code": "178320",
+      "corp_name": "서진시스템",
+      "rcept_no": "20260824000269",
+      "rcept_dt": "20260824",
+      "flr_nm": "서진시스템",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:전환사채권발행결정"
+    }
+  },
+  {
+    "note": "keyword:전환사채권발행결정 critical (실측 31건 중 하나: 오르비텍).",
+    "item": {
+      "report_nm": "주요사항보고서(전환사채권발행결정)",
+      "corp_cls": "K",
+      "stock_code": "046120",
+      "corp_name": "오르비텍",
+      "rcept_no": "20260824000272",
+      "rcept_dt": "20260824",
+      "flr_nm": "오르비텍",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:전환사채권발행결정"
+    }
+  },
+  {
+    "note": "keyword:신주인수권부사채권발행결정 critical (실측 전부 1건: 삼진식품).",
+    "item": {
+      "report_nm": "주요사항보고서(신주인수권부사채권발행결정)",
+      "corp_cls": "K",
+      "stock_code": "0013V0",
+      "corp_name": "삼진식품",
+      "rcept_no": "20260916000348",
+      "rcept_dt": "20260916",
+      "flr_nm": "삼진식품",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:신주인수권부사채권발행결정"
+    }
+  },
+  {
+    "note": "keyword:주식병합결정 critical (실측 12건 중 하나: 에쎈테크).",
+    "item": {
+      "report_nm": "주식병합결정              ",
+      "corp_cls": "K",
+      "stock_code": "043340",
+      "corp_name": "에쎈테크",
+      "rcept_no": "20260825900331",
+      "rcept_dt": "20260825",
+      "flr_nm": "에쎈테크",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:주식병합결정"
+    }
+  },
+  {
+    "note": "keyword:주식병합결정 critical (실측 12건 중 하나: 유니온머티리얼).",
+    "item": {
+      "report_nm": "주식병합결정              ",
+      "corp_cls": "Y",
+      "stock_code": "047400",
+      "corp_name": "유니온머티리얼",
+      "rcept_no": "20260826800519",
+      "rcept_dt": "20260826",
+      "flr_nm": "유니온머티리얼",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:주식병합결정"
+    }
+  },
+  {
+    "note": "keyword:주식병합결정 critical (실측 12건 중 하나: 에스디생명공학).",
+    "item": {
+      "report_nm": "주식병합결정              ",
+      "corp_cls": "K",
+      "stock_code": "217480",
+      "corp_name": "에스디생명공학",
+      "rcept_no": "20260827900612",
+      "rcept_dt": "20260827",
+      "flr_nm": "에스디생명공학",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:주식병합결정"
+    }
+  },
+  {
+    "note": "keyword:감자결정 critical (실측 10건 중 하나: 이마트).",
+    "item": {
+      "report_nm": "감자결정(종속회사의주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "139480",
+      "corp_name": "이마트",
+      "rcept_no": "20260828800315",
+      "rcept_dt": "20260828",
+      "flr_nm": "이마트",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:감자결정"
+    }
+  },
+  {
+    "note": "keyword:감자결정 critical (실측 10건 중 하나: 베노티앤알).",
+    "item": {
+      "report_nm": "주요사항보고서(감자결정)",
+      "corp_cls": "K",
+      "stock_code": "206400",
+      "corp_name": "베노티앤알",
+      "rcept_no": "20260902000314",
+      "rcept_dt": "20260902",
+      "flr_nm": "베노티앤알",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:감자결정"
+    }
+  },
+  {
+    "note": "keyword:감자결정 critical (실측 10건 중 하나: 루멘스바이오스).",
+    "item": {
+      "report_nm": "주요사항보고서(감자결정)",
+      "corp_cls": "K",
+      "stock_code": "038060",
+      "corp_name": "루멘스바이오스",
+      "rcept_no": "20260911000535",
+      "rcept_dt": "20260911",
+      "flr_nm": "루멘스바이오스",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:감자결정"
+    }
+  },
+  {
+    "note": "keyword:회사합병결정 critical, 노이즈와 섞이지 않은 일반형 (실측 22건 중 하나: 휴비츠) — 게이트 순서 핀(위쪽)과 함께 3건째.",
+    "item": {
+      "report_nm": "주요사항보고서(회사합병결정)",
+      "corp_cls": "K",
+      "stock_code": "065510",
+      "corp_name": "휴비츠",
+      "rcept_no": "20260824000197",
+      "rcept_dt": "20260824",
+      "flr_nm": "휴비츠",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회사합병결정"
+    }
+  },
+  {
+    "note": "keyword:회사분할결정 critical (실측 전부 3건: SK텔레콤) — 회사합병결정과 대칭인 취득·처분 비대칭 패턴.",
+    "item": {
+      "report_nm": "회사분할결정(종속회사의주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "017670",
+      "corp_name": "SK텔레콤",
+      "rcept_no": "20260827800679",
+      "rcept_dt": "20260827",
+      "flr_nm": "SK텔레콤",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회사분할결정"
+    }
+  },
+  {
+    "note": "keyword:회사분할결정 critical (실측 전부 3건: 금양) — 회사합병결정과 대칭인 취득·처분 비대칭 패턴.",
+    "item": {
+      "report_nm": "주요사항보고서(회사분할결정)",
+      "corp_cls": "Y",
+      "stock_code": "001570",
+      "corp_name": "금양",
+      "rcept_no": "20260909000291",
+      "rcept_dt": "20260909",
+      "flr_nm": "금양",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회사분할결정"
+    }
+  },
+  {
+    "note": "keyword:회사분할결정 critical (실측 전부 3건: 보령) — 회사합병결정과 대칭인 취득·처분 비대칭 패턴.",
+    "item": {
+      "report_nm": "주요사항보고서(회사분할결정)",
+      "corp_cls": "Y",
+      "stock_code": "003850",
+      "corp_name": "보령",
+      "rcept_no": "20260915000070",
+      "rcept_dt": "20260915",
+      "flr_nm": "보령",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회사분할결정"
+    }
+  },
+  {
+    "note": "keyword:타법인주식및출자증권처분결정 critical (실측 16건 중 하나: LG생활건강).",
+    "item": {
+      "report_nm": "타법인주식및출자증권처분결정(자율공시)(종속회사의주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "051900",
+      "corp_name": "LG생활건강",
+      "rcept_no": "20260824800386",
+      "rcept_dt": "20260824",
+      "flr_nm": "LG생활건강",
+      "rm": "유정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:타법인주식및출자증권처분결정"
+    }
+  },
+  {
+    "note": "keyword:타법인주식및출자증권처분결정 critical (실측 16건 중 하나: 청보).",
+    "item": {
+      "report_nm": "기타주요경영사항              (타법인 주식 및 출자증권 처분결정 철회)",
+      "corp_cls": "K",
+      "stock_code": "013720",
+      "corp_name": "청보",
+      "rcept_no": "20260824900465",
+      "rcept_dt": "20260824",
+      "flr_nm": "청보",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:타법인주식및출자증권처분결정"
+    }
+  },
+  {
+    "note": "keyword:타법인주식및출자증권처분결정 critical (실측 16건 중 하나: HLB생명과학).",
+    "item": {
+      "report_nm": "타법인주식및출자증권처분결정              ",
+      "corp_cls": "K",
+      "stock_code": "067630",
+      "corp_name": "HLB생명과학",
+      "rcept_no": "20260826900666",
+      "rcept_dt": "20260826",
+      "flr_nm": "HLB생명과학",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:타법인주식및출자증권처분결정"
+    }
+  },
+  {
+    "note": "keyword:상장폐지 critical (실측 53건 중 하나: 원풍물산, 기타시장안내              (시가총액 미달에 따른 상장폐지 우려 관련 안내)).",
+    "item": {
+      "report_nm": "기타시장안내              (시가총액 미달에 따른 상장폐지 우려 관련 안내)",
+      "corp_cls": "K",
+      "stock_code": "008290",
+      "corp_name": "원풍물산",
+      "rcept_no": "20260825900731",
+      "rcept_dt": "20260825",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:상장폐지"
+    }
+  },
+  {
+    "note": "keyword:상장폐지 critical (실측 53건 중 하나: 에스엘에스바이오, 기타시장안내              (개선기간 종료에 따른 상장폐지 여부 결정 안내)).",
+    "item": {
+      "report_nm": "기타시장안내              (개선기간 종료에 따른 상장폐지 여부 결정 안내)",
+      "corp_cls": "K",
+      "stock_code": "246250",
+      "corp_name": "에스엘에스바이오",
+      "rcept_no": "20260831900492",
+      "rcept_dt": "20260831",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:상장폐지"
+    }
+  },
+  {
+    "note": "keyword:상장폐지 critical (실측 53건 중 하나: DGI, 기타시장안내              (개선기간 종료에 따른 상장폐지 여부 결정 안내)).",
+    "item": {
+      "report_nm": "기타시장안내              (개선기간 종료에 따른 상장폐지 여부 결정 안내)",
+      "corp_cls": "K",
+      "stock_code": "099520",
+      "corp_name": "DGI",
+      "rcept_no": "20260831900502",
+      "rcept_dt": "20260831",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:상장폐지"
+    }
+  },
+  {
+    "note": "keyword:관리종목지정 critical (실측 33건 중 하나: 멤레이비티).",
+    "item": {
+      "report_nm": "기타시장안내(관리종목지정우려종목)              (주가 1,000원 미달)",
+      "corp_cls": "K",
+      "stock_code": "072770",
+      "corp_name": "멤레이비티",
+      "rcept_no": "20260824900721",
+      "rcept_dt": "20260824",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:관리종목지정"
+    }
+  },
+  {
+    "note": "keyword:관리종목지정 critical (실측 33건 중 하나: 세림B&G).",
+    "item": {
+      "report_nm": "기타시장안내(관리종목지정우려종목)              (주가 1,000원 미달)",
+      "corp_cls": "K",
+      "stock_code": "340440",
+      "corp_name": "세림B&G",
+      "rcept_no": "20260825900727",
+      "rcept_dt": "20260825",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:관리종목지정"
+    }
+  },
+  {
+    "note": "keyword:관리종목지정 critical (실측 33건 중 하나: 지니틱스).",
+    "item": {
+      "report_nm": "기타시장안내(관리종목지정우려종목)              (시가총액 200억원 미달)",
+      "corp_cls": "K",
+      "stock_code": "303030",
+      "corp_name": "지니틱스",
+      "rcept_no": "20260826900777",
+      "rcept_dt": "20260826",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:관리종목지정"
+    }
+  },
+  {
+    "note": "keyword:실질심사 critical (실측 21건 중 하나: 버킷스튜디오) — no-keyword-match로 숨어 있던 상장적격성 실질심사(Finding 6).",
+    "item": {
+      "report_nm": "상장적격성실질심사관련주요개선계획(자율공시)              ",
+      "corp_cls": "K",
+      "stock_code": "066410",
+      "corp_name": "버킷스튜디오",
+      "rcept_no": "20260825900246",
+      "rcept_dt": "20260825",
+      "flr_nm": "버킷스튜디오",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:실질심사"
+    }
+  },
+  {
+    "note": "keyword:실질심사 critical (실측 21건 중 하나: 코맥스) — no-keyword-match로 숨어 있던 상장적격성 실질심사(Finding 6).",
+    "item": {
+      "report_nm": "상장적격성실질심사관련주요개선계획(자율공시)              ",
+      "corp_cls": "K",
+      "stock_code": "036690",
+      "corp_name": "코맥스",
+      "rcept_no": "20260825900521",
+      "rcept_dt": "20260825",
+      "flr_nm": "코맥스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:실질심사"
+    }
+  },
+  {
+    "note": "keyword:실질심사 critical (실측 21건 중 하나: 스코넥) — no-keyword-match로 숨어 있던 상장적격성 실질심사(Finding 6).",
+    "item": {
+      "report_nm": "기타시장안내              (실질심사 대상여부 결정을 위한 조사기간 연장 안내)",
+      "corp_cls": "K",
+      "stock_code": "276040",
+      "corp_name": "스코넥",
+      "rcept_no": "20260827900316",
+      "rcept_dt": "20260827",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:실질심사"
+    }
+  },
+  {
+    "note": "keyword:회생절차개시신청 critical (실측 전부 3건: 윌비스).",
+    "item": {
+      "report_nm": "주요사항보고서(회생절차개시신청)",
+      "corp_cls": "Y",
+      "stock_code": "008600",
+      "corp_name": "윌비스",
+      "rcept_no": "20260904000383",
+      "rcept_dt": "20260904",
+      "flr_nm": "윌비스",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회생절차개시신청"
+    }
+  },
+  {
+    "note": "keyword:회생절차개시신청 critical (실측 전부 3건: 티에스넥스젠).",
+    "item": {
+      "report_nm": "회생절차개시신청기각              ",
+      "corp_cls": "K",
+      "stock_code": "043220",
+      "corp_name": "티에스넥스젠",
+      "rcept_no": "20260914900642",
+      "rcept_dt": "20260914",
+      "flr_nm": "티에스넥스젠",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회생절차개시신청"
+    }
+  },
+  {
+    "note": "keyword:회생절차개시신청 critical (실측 전부 3건: 티에스넥스젠).",
+    "item": {
+      "report_nm": "기타시장안내              (회생절차 개시신청 기각 관련 시장안내)",
+      "corp_cls": "K",
+      "stock_code": "043220",
+      "corp_name": "티에스넥스젠",
+      "rcept_no": "20260914900664",
+      "rcept_dt": "20260914",
+      "flr_nm": "코스닥시장본부",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:회생절차개시신청"
+    }
+  },
+  {
+    "note": "keyword:영업정지 critical (실측 전부 1건: 젠큐릭스).",
+    "item": {
+      "report_nm": "주요사항보고서(영업정지)",
+      "corp_cls": "K",
+      "stock_code": "229000",
+      "corp_name": "젠큐릭스",
+      "rcept_no": "20260915000165",
+      "rcept_dt": "20260915",
+      "flr_nm": "젠큐릭스",
+      "rm": "정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "critical",
+      "rule": "keyword:영업정지"
+    }
+  },
+  {
+    "note": "keyword:매출액또는손익구조30%(대규모법인은15%)이상변동 high (실측 전부 1건: 아세아텍).",
+    "item": {
+      "report_nm": "매출액또는손익구조30%(대규모법인은15%)이상변동              ",
+      "corp_cls": "K",
+      "stock_code": "050860",
+      "corp_name": "아세아텍",
+      "rcept_no": "20260828900937",
+      "rcept_dt": "20260828",
+      "flr_nm": "아세아텍",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:매출액또는손익구조30%(대규모법인은15%)이상변동"
+    }
+  },
+  {
+    "note": "keyword:타법인주식및출자증권취득결정 high (실측 42건 중 하나: LG생활건강) — 처분결정(critical)과 부분 문자열로 섞이지 않는다.",
+    "item": {
+      "report_nm": "타법인주식및출자증권취득결정(종속회사의주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "051900",
+      "corp_name": "LG생활건강",
+      "rcept_no": "20260824800439",
+      "rcept_dt": "20260824",
+      "flr_nm": "LG생활건강",
+      "rm": "유정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:타법인주식및출자증권취득결정"
+    }
+  },
+  {
+    "note": "keyword:타법인주식및출자증권취득결정 high (실측 42건 중 하나: 신한서부티엔디리츠) — 처분결정(critical)과 부분 문자열로 섞이지 않는다.",
+    "item": {
+      "report_nm": "타법인주식및출자증권취득결정              ",
+      "corp_cls": "Y",
+      "stock_code": "404990",
+      "corp_name": "신한서부티엔디리츠",
+      "rcept_no": "20260824800600",
+      "rcept_dt": "20260824",
+      "flr_nm": "신한서부티엔디리츠",
+      "rm": "유정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:타법인주식및출자증권취득결정"
+    }
+  },
+  {
+    "note": "keyword:타법인주식및출자증권취득결정 high (실측 42건 중 하나: 대동) — 처분결정(critical)과 부분 문자열로 섞이지 않는다.",
+    "item": {
+      "report_nm": "타법인주식및출자증권취득결정              ",
+      "corp_cls": "Y",
+      "stock_code": "000490",
+      "corp_name": "대동",
+      "rcept_no": "20260825800271",
+      "rcept_dt": "20260825",
+      "flr_nm": "대동",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:타법인주식및출자증권취득결정"
+    }
+  },
+  {
+    "note": "keyword:영업양수도 high (실측 전부 1건: 주성코퍼레이션).",
+    "item": {
+      "report_nm": "합병등종료보고서(영업양수도)",
+      "corp_cls": "Y",
+      "stock_code": "109070",
+      "corp_name": "주성코퍼레이션",
+      "rcept_no": "20260917000150",
+      "rcept_dt": "20260917",
+      "flr_nm": "주성코퍼레이션",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:영업양수도"
+    }
+  },
+  {
+    "note": "keyword:현금·현물배당결정 high (실측 10건 중 하나: LG).",
+    "item": {
+      "report_nm": "현금ㆍ현물배당결정              ",
+      "corp_cls": "Y",
+      "stock_code": "003550",
+      "corp_name": "LG",
+      "rcept_no": "20260827800295",
+      "rcept_dt": "20260827",
+      "flr_nm": "LG",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:현금·현물배당결정"
+    }
+  },
+  {
+    "note": "keyword:현금·현물배당결정 high (실측 10건 중 하나: 아세아텍).",
+    "item": {
+      "report_nm": "현금ㆍ현물배당결정              ",
+      "corp_cls": "K",
+      "stock_code": "050860",
+      "corp_name": "아세아텍",
+      "rcept_no": "20260828900940",
+      "rcept_dt": "20260828",
+      "flr_nm": "아세아텍",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:현금·현물배당결정"
+    }
+  },
+  {
+    "note": "keyword:현금·현물배당결정 high (실측 10건 중 하나: 만호제강).",
+    "item": {
+      "report_nm": "현금ㆍ현물배당결정              ",
+      "corp_cls": "Y",
+      "stock_code": "001080",
+      "corp_name": "만호제강",
+      "rcept_no": "20260831800195",
+      "rcept_dt": "20260831",
+      "flr_nm": "만호제강",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:현금·현물배당결정"
+    }
+  },
+  {
+    "note": "keyword:조회공시요구 high (실측 28건 중 하나: LG화학, 조회공시요구(풍문또는보도)에대한답변(미확정)) — Finding 6에서 답변 유무·사유를 가리지 않도록 넓힌 키워드.",
+    "item": {
+      "report_nm": "조회공시요구(풍문또는보도)에대한답변(미확정)              ",
+      "corp_cls": "Y",
+      "stock_code": "051910",
+      "corp_name": "LG화학",
+      "rcept_no": "20260824800208",
+      "rcept_dt": "20260824",
+      "flr_nm": "LG화학",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:조회공시요구"
+    }
+  },
+  {
+    "note": "keyword:조회공시요구 high (실측 28건 중 하나: 원풍물산, 조회공시요구(현저한시황변동)에대한답변(중요정보없음)) — Finding 6에서 답변 유무·사유를 가리지 않도록 넓힌 키워드.",
+    "item": {
+      "report_nm": "조회공시요구(현저한시황변동)에대한답변(중요정보없음)              ",
+      "corp_cls": "K",
+      "stock_code": "008290",
+      "corp_name": "원풍물산",
+      "rcept_no": "20260824900120",
+      "rcept_dt": "20260824",
+      "flr_nm": "원풍물산",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:조회공시요구"
+    }
+  },
+  {
+    "note": "keyword:조회공시요구 high (실측 28건 중 하나: CJ CGV, 조회공시요구(풍문또는보도)에대한답변(미확정)) — Finding 6에서 답변 유무·사유를 가리지 않도록 넓힌 키워드.",
+    "item": {
+      "report_nm": "조회공시요구(풍문또는보도)에대한답변(미확정)              ",
+      "corp_cls": "Y",
+      "stock_code": "079160",
+      "corp_name": "CJ CGV",
+      "rcept_no": "20260828800619",
+      "rcept_dt": "20260828",
+      "flr_nm": "CJ CGV",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:조회공시요구"
+    }
+  },
+  {
+    "note": "keyword:소송등의제기 high (실측 36건 중 하나: 아센디오).",
+    "item": {
+      "report_nm": "소송등의제기ㆍ신청(경영권분쟁소송)              ",
+      "corp_cls": "Y",
+      "stock_code": "012170",
+      "corp_name": "아센디오",
+      "rcept_no": "20260824800612",
+      "rcept_dt": "20260824",
+      "flr_nm": "아센디오",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:소송등의제기"
+    }
+  },
+  {
+    "note": "keyword:소송등의제기 high (실측 36건 중 하나: 금강철강).",
+    "item": {
+      "report_nm": "소송등의제기ㆍ신청(경영권분쟁소송)              (회사에 관한 소송)",
+      "corp_cls": "K",
+      "stock_code": "053260",
+      "corp_name": "금강철강",
+      "rcept_no": "20260824900354",
+      "rcept_dt": "20260824",
+      "flr_nm": "금강철강",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:소송등의제기"
+    }
+  },
+  {
+    "note": "keyword:소송등의제기 high (실측 36건 중 하나: 가비아).",
+    "item": {
+      "report_nm": "소송등의제기ㆍ신청(경영권분쟁소송)              (회계장부등열람및등사가처분)",
+      "corp_cls": "K",
+      "stock_code": "079940",
+      "corp_name": "가비아",
+      "rcept_no": "20260825900580",
+      "rcept_dt": "20260825",
+      "flr_nm": "가비아",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:소송등의제기"
+    }
+  },
+  {
+    "note": "keyword:소송등의판결 high (실측 37건 중 하나: 대호에이엘).",
+    "item": {
+      "report_nm": "소송등의판결ㆍ결정              ",
+      "corp_cls": "Y",
+      "stock_code": "069460",
+      "corp_name": "대호에이엘",
+      "rcept_no": "20260824800135",
+      "rcept_dt": "20260824",
+      "flr_nm": "대호에이엘",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:소송등의판결"
+    }
+  },
+  {
+    "note": "keyword:소송등의판결 high (실측 37건 중 하나: 피앤씨테크).",
+    "item": {
+      "report_nm": "소송등의판결ㆍ결정              ",
+      "corp_cls": "K",
+      "stock_code": "237750",
+      "corp_name": "피앤씨테크",
+      "rcept_no": "20260824900199",
+      "rcept_dt": "20260824",
+      "flr_nm": "피앤씨테크",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:소송등의판결"
+    }
+  },
+  {
+    "note": "keyword:소송등의판결 high (실측 37건 중 하나: LS증권).",
+    "item": {
+      "report_nm": "소송등의판결ㆍ결정(자율공시:일정금액미만의청구)              ",
+      "corp_cls": "K",
+      "stock_code": "078020",
+      "corp_name": "LS증권",
+      "rcept_no": "20260824900376",
+      "rcept_dt": "20260824",
+      "flr_nm": "LS증권",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:소송등의판결"
+    }
+  },
+  {
+    "note": "keyword:풍문또는보도에대한해명 high (실측 34건 중 하나: 롯데케미칼).",
+    "item": {
+      "report_nm": "풍문또는보도에대한해명(미확정)              ",
+      "corp_cls": "Y",
+      "stock_code": "011170",
+      "corp_name": "롯데케미칼",
+      "rcept_no": "20260824800139",
+      "rcept_dt": "20260824",
+      "flr_nm": "롯데케미칼",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:풍문또는보도에대한해명"
+    }
+  },
+  {
+    "note": "keyword:풍문또는보도에대한해명 high (실측 34건 중 하나: LG화학).",
+    "item": {
+      "report_nm": "풍문또는보도에대한해명(미확정)              ",
+      "corp_cls": "Y",
+      "stock_code": "051910",
+      "corp_name": "LG화학",
+      "rcept_no": "20260824800215",
+      "rcept_dt": "20260824",
+      "flr_nm": "LG화학",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:풍문또는보도에대한해명"
+    }
+  },
+  {
+    "note": "keyword:풍문또는보도에대한해명 high (실측 34건 중 하나: HD현대).",
+    "item": {
+      "report_nm": "풍문또는보도에대한해명(미확정)(자회사의 주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "267250",
+      "corp_name": "HD현대",
+      "rcept_no": "20260824800261",
+      "rcept_dt": "20260824",
+      "flr_nm": "HD현대",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "high",
+      "rule": "keyword:풍문또는보도에대한해명"
+    }
+  },
+  {
+    "note": "keyword:전환가액의조정 normal (실측 51건 중 하나: 엑스페릭스) — 새로 생긴 normal 티어의 첫 입주자(Finding 3).",
+    "item": {
+      "report_nm": "전환가액의조정              (제4회차)",
+      "corp_cls": "K",
+      "stock_code": "317770",
+      "corp_name": "엑스페릭스",
+      "rcept_no": "20260824900356",
+      "rcept_dt": "20260824",
+      "flr_nm": "엑스페릭스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:전환가액의조정"
+    }
+  },
+  {
+    "note": "keyword:전환가액의조정 normal (실측 51건 중 하나: 에코프로비엠) — 새로 생긴 normal 티어의 첫 입주자(Finding 3).",
+    "item": {
+      "report_nm": "전환가액의조정              ",
+      "corp_cls": "K",
+      "stock_code": "247540",
+      "corp_name": "에코프로비엠",
+      "rcept_no": "20260824900368",
+      "rcept_dt": "20260824",
+      "flr_nm": "에코프로비엠",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:전환가액의조정"
+    }
+  },
+  {
+    "note": "keyword:전환가액의조정 normal (실측 51건 중 하나: 캠시스) — 새로 생긴 normal 티어의 첫 입주자(Finding 3).",
+    "item": {
+      "report_nm": "전환가액의조정              ",
+      "corp_cls": "K",
+      "stock_code": "050110",
+      "corp_name": "캠시스",
+      "rcept_no": "20260825900493",
+      "rcept_dt": "20260825",
+      "flr_nm": "캠시스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:전환가액의조정"
+    }
+  },
+  {
+    "note": "keyword:대표이사변경 normal (실측 31건 중 하나: 지구홀딩스).",
+    "item": {
+      "report_nm": "대표이사변경              ",
+      "corp_cls": "K",
+      "stock_code": "221800",
+      "corp_name": "지구홀딩스",
+      "rcept_no": "20260827900499",
+      "rcept_dt": "20260827",
+      "flr_nm": "지구홀딩스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:대표이사변경"
+    }
+  },
+  {
+    "note": "keyword:대표이사변경 normal (실측 31건 중 하나: CSA 코스믹).",
+    "item": {
+      "report_nm": "대표이사변경              ",
+      "corp_cls": "K",
+      "stock_code": "083660",
+      "corp_name": "CSA 코스믹",
+      "rcept_no": "20260827900524",
+      "rcept_dt": "20260827",
+      "flr_nm": "CSA 코스믹",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:대표이사변경"
+    }
+  },
+  {
+    "note": "keyword:대표이사변경 normal (실측 31건 중 하나: DMS).",
+    "item": {
+      "report_nm": "대표이사변경              ",
+      "corp_cls": "K",
+      "stock_code": "068790",
+      "corp_name": "DMS",
+      "rcept_no": "20260828900225",
+      "rcept_dt": "20260828",
+      "flr_nm": "DMS",
+      "rm": "코정"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:대표이사변경"
+    }
+  },
+  {
+    "note": "keyword:금전대여결정 normal (실측 16건 중 하나: 아비코전자).",
+    "item": {
+      "report_nm": "금전대여결정(자율공시)              ",
+      "corp_cls": "K",
+      "stock_code": "036010",
+      "corp_name": "아비코전자",
+      "rcept_no": "20260825900290",
+      "rcept_dt": "20260825",
+      "flr_nm": "아비코전자",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:금전대여결정"
+    }
+  },
+  {
+    "note": "keyword:금전대여결정 normal (실측 16건 중 하나: 라이온켐텍).",
+    "item": {
+      "report_nm": "금전대여결정              ",
+      "corp_cls": "K",
+      "stock_code": "171120",
+      "corp_name": "라이온켐텍",
+      "rcept_no": "20260826900471",
+      "rcept_dt": "20260826",
+      "flr_nm": "라이온켐텍",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:금전대여결정"
+    }
+  },
+  {
+    "note": "keyword:금전대여결정 normal (실측 16건 중 하나: 코스맥스).",
+    "item": {
+      "report_nm": "금전대여결정              ",
+      "corp_cls": "Y",
+      "stock_code": "192820",
+      "corp_name": "코스맥스",
+      "rcept_no": "20260901800717",
+      "rcept_dt": "20260901",
+      "flr_nm": "코스맥스",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:금전대여결정"
+    }
+  },
+  {
+    "note": "keyword:투자판단관련주요경영사항 normal (실측 64건 중 하나: 셀트리온) — 회사 스스로 중요하다고 표시한 공시.",
+    "item": {
+      "report_nm": "투자판단관련주요경영사항              (CTP51(키트루다 바이오시밀러) 한국 품목허가 신청)",
+      "corp_cls": "Y",
+      "stock_code": "068270",
+      "corp_name": "셀트리온",
+      "rcept_no": "20260824800001",
+      "rcept_dt": "20260824",
+      "flr_nm": "셀트리온",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:투자판단관련주요경영사항"
+    }
+  },
+  {
+    "note": "keyword:투자판단관련주요경영사항 normal (실측 64건 중 하나: 한미약품) — 회사 스스로 중요하다고 표시한 공시.",
+    "item": {
+      "report_nm": "투자판단관련주요경영사항              ",
+      "corp_cls": "Y",
+      "stock_code": "128940",
+      "corp_name": "한미약품",
+      "rcept_no": "20260824800144",
+      "rcept_dt": "20260824",
+      "flr_nm": "한미약품",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:투자판단관련주요경영사항"
+    }
+  },
+  {
+    "note": "keyword:투자판단관련주요경영사항 normal (실측 64건 중 하나: 한미사이언스) — 회사 스스로 중요하다고 표시한 공시.",
+    "item": {
+      "report_nm": "투자판단관련주요경영사항(자회사의 주요경영사항)              ",
+      "corp_cls": "Y",
+      "stock_code": "008930",
+      "corp_name": "한미사이언스",
+      "rcept_no": "20260824800150",
+      "rcept_dt": "20260824",
+      "flr_nm": "한미사이언스",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:투자판단관련주요경영사항"
+    }
+  },
+  {
+    "note": "keyword:자기전환사채만기전취득결정 normal (실측 29건 중 하나: 제이에스링크) — CB 이동 3종 중 하나.",
+    "item": {
+      "report_nm": "주요사항보고서(자기전환사채만기전취득결정)",
+      "corp_cls": "K",
+      "stock_code": "127120",
+      "corp_name": "제이에스링크",
+      "rcept_no": "20260824000103",
+      "rcept_dt": "20260824",
+      "flr_nm": "제이에스링크",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:자기전환사채만기전취득결정"
+    }
+  },
+  {
+    "note": "keyword:자기전환사채만기전취득결정 normal (실측 29건 중 하나: 넥사다이내믹스) — CB 이동 3종 중 하나.",
+    "item": {
+      "report_nm": "주요사항보고서(자기전환사채만기전취득결정)",
+      "corp_cls": "K",
+      "stock_code": "351320",
+      "corp_name": "넥사다이내믹스",
+      "rcept_no": "20260824000309",
+      "rcept_dt": "20260824",
+      "flr_nm": "넥사다이내믹스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:자기전환사채만기전취득결정"
+    }
+  },
+  {
+    "note": "keyword:자기전환사채만기전취득결정 normal (실측 29건 중 하나: 사토시홀딩스) — CB 이동 3종 중 하나.",
+    "item": {
+      "report_nm": "주요사항보고서(자기전환사채만기전취득결정)",
+      "corp_cls": "K",
+      "stock_code": "223310",
+      "corp_name": "사토시홀딩스",
+      "rcept_no": "20260825000392",
+      "rcept_dt": "20260825",
+      "flr_nm": "사토시홀딩스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:자기전환사채만기전취득결정"
+    }
+  },
+  {
+    "note": "keyword:전환사채(해외전환사채포함)발행후만기전사채취득 normal (실측 31건 중 하나: 압타바이오).",
+    "item": {
+      "report_nm": "전환사채(해외전환사채포함)발행후만기전사채취득              ",
+      "corp_cls": "K",
+      "stock_code": "293780",
+      "corp_name": "압타바이오",
+      "rcept_no": "20260824900106",
+      "rcept_dt": "20260824",
+      "flr_nm": "압타바이오",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:전환사채(해외전환사채포함)발행후만기전사채취득"
+    }
+  },
+  {
+    "note": "keyword:전환사채(해외전환사채포함)발행후만기전사채취득 normal (실측 31건 중 하나: 덴티스).",
+    "item": {
+      "report_nm": "전환사채(해외전환사채포함)발행후만기전사채취득              ",
+      "corp_cls": "K",
+      "stock_code": "261200",
+      "corp_name": "덴티스",
+      "rcept_no": "20260824900415",
+      "rcept_dt": "20260824",
+      "flr_nm": "덴티스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:전환사채(해외전환사채포함)발행후만기전사채취득"
+    }
+  },
+  {
+    "note": "keyword:전환사채(해외전환사채포함)발행후만기전사채취득 normal (실측 31건 중 하나: 나이벡).",
+    "item": {
+      "report_nm": "전환사채(해외전환사채포함)발행후만기전사채취득              ",
+      "corp_cls": "K",
+      "stock_code": "138610",
+      "corp_name": "나이벡",
+      "rcept_no": "20260824900577",
+      "rcept_dt": "20260824",
+      "flr_nm": "나이벡",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:전환사채(해외전환사채포함)발행후만기전사채취득"
+    }
+  },
+  {
+    "note": "keyword:자기전환사채매도결정 normal (실측 전부 1건: 아리바이오홀딩스) — CB 이동 3종 중 재매각.",
+    "item": {
+      "report_nm": "주요사항보고서(자기전환사채매도결정)",
+      "corp_cls": "K",
+      "stock_code": "290690",
+      "corp_name": "아리바이오홀딩스",
+      "rcept_no": "20260910000354",
+      "rcept_dt": "20260910",
+      "flr_nm": "아리바이오홀딩스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "pass",
+      "tier": "normal",
+      "rule": "keyword:자기전환사채매도결정"
+    }
+  },
+  {
+    "note": "drop:no-stock-code — 비상장(corp_cls=E, stock_code 없음). 실측 6,593건 중 가장 큰 drop 사유.",
+    "item": {
+      "report_nm": "효력발생안내( 2026.8.10. 제출 일괄신고서(집합투자증권-회사형) )",
+      "corp_cls": "E",
+      "stock_code": "",
+      "corp_name": "풀러튼룩스펀드",
+      "rcept_no": "20260811100001",
+      "rcept_dt": "20260826",
+      "flr_nm": "금융감독원",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "no-stock-code"
+    }
+  },
+  {
+    "note": "drop:no-stock-code — 비상장(corp_cls=E, stock_code 없음). 실측 6,593건 중 가장 큰 drop 사유.",
+    "item": {
+      "report_nm": "효력발생안내( 2026.8.14. 제출 증권신고서(지분증권) )",
+      "corp_cls": "E",
+      "stock_code": "",
+      "corp_name": "덕산넵코어스",
+      "rcept_no": "20260814100044",
+      "rcept_dt": "20260908",
+      "flr_nm": "금융감독원",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "no-stock-code"
+    }
+  },
+  {
+    "note": "drop:no-stock-code — [변경등록] 접두어가 붙어 있지만 PREFIX_RULES에 없는 미인식 접두어다. 이 20영업일 데이터셋 전체에서 대괄호 접두어 중 유일하게 미인식인 사례(실측 4건, 전부 corp_cls=E)인데, 넷 다 stock_code가 비어 있어 게이트 4(정정 접두어)에 닿기도 전에 게이트 1(비상장 제외)에서 이미 drop된다 — '미인식 접두어가 게이트 4를 통과해 정기보고서 판정 등 후속 게이트로 흘러가는' 실제 사례는 이 20일 표본에는 없다(README의 커버리지 갭 참고).",
+    "item": {
+      "report_nm": "[변경등록]자산유동화계획의등록신청서(유동화전문회사)",
+      "corp_cls": "E",
+      "stock_code": "",
+      "corp_name": "에프디에이치2209유동화전문유한회사",
+      "rcept_no": "20260826000117",
+      "rcept_dt": "20260826",
+      "flr_nm": "에프디에이치2209유동화전문유한회사",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "no-stock-code"
+    }
+  },
+  {
+    "note": "drop:market-not-target — corp_cls=E (증권사가 발행하는 파생결합사채 일괄신고, 코스피/코스닥 아님). 실측 743건 중 하나.",
+    "item": {
+      "report_nm": "일괄신고추가서류(파생결합사채-주가연계파생결합사채)",
+      "corp_cls": "E",
+      "stock_code": "003450",
+      "corp_name": "케이비증권",
+      "rcept_no": "20260824000004",
+      "rcept_dt": "20260824",
+      "flr_nm": "케이비증권",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "market-not-target"
+    }
+  },
+  {
+    "note": "drop:market-not-target — corp_cls=N (코넥스). 코스피(Y)·코스닥(K)만 target이므로 코넥스는 게이트 2에서 drop된다.",
+    "item": {
+      "report_nm": "주식등의대량보유상황보고서(일반)",
+      "corp_cls": "N",
+      "stock_code": "336040",
+      "corp_name": "타스컴",
+      "rcept_no": "20260824000278",
+      "rcept_dt": "20260824",
+      "flr_nm": "이성동",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "market-not-target"
+    }
+  },
+  {
+    "note": "drop:market-not-target — corp_cls=E, ticker는 있지만(203690) 정기보고서 문구(반기보고서)와 무관하게 게이트 2(시장)에서 이미 drop된다 — 게이트 순서상 정기보고서 판정(게이트 3)까지 가지 않는다.",
+    "item": {
+      "report_nm": "반기보고서 (2026.06)",
+      "corp_cls": "E",
+      "stock_code": "203690",
+      "corp_name": "아크솔루션스",
+      "rcept_no": "20260824000339",
+      "rcept_dt": "20260824",
+      "flr_nm": "아크솔루션스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "market-not-target"
+    }
+  },
+  {
+    "note": "drop:periodic-report — 사업보고서 (실측 12건 중 하나).",
+    "item": {
+      "report_nm": "사업보고서 (2025.12)",
+      "corp_cls": "K",
+      "stock_code": "0155E0",
+      "corp_name": "해치텍",
+      "rcept_no": "20260828000259",
+      "rcept_dt": "20260828",
+      "flr_nm": "해치텍",
+      "rm": "연"
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "periodic-report"
+    }
+  },
+  {
+    "note": "drop:periodic-report — 반기보고서 (실측 28건 중 하나, 이 사유의 다수를 차지). 이 표본에는 분기보고서 실측 0건(상장 종목 기준 사업 12건 + 반기 28건 = periodic-report 40건 전부).",
+    "item": {
+      "report_nm": "반기보고서 (2026.06)",
+      "corp_cls": "K",
+      "stock_code": "389470",
+      "corp_name": "인벤티지랩",
+      "rcept_no": "20260826000836",
+      "rcept_dt": "20260826",
+      "flr_nm": "인벤티지랩",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "periodic-report"
+    }
+  },
+  {
+    "note": "drop:noise — 주식등의대량보유상황보고서(약식). 5% 룰 보고 계열, 의도적으로 범위 밖.",
+    "item": {
+      "report_nm": "주식등의대량보유상황보고서(약식)",
+      "corp_cls": "Y",
+      "stock_code": "217590",
+      "corp_name": "티엠씨",
+      "rcept_no": "20260824000006",
+      "rcept_dt": "20260824",
+      "flr_nm": "펙투스-제이비우리 신기술사업투자조합 제1호",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "noise"
+    }
+  },
+  {
+    "note": "drop:noise — 일괄신고추가서류. 이미 얼럿되는 발행결정의 등록 후속 서류.",
+    "item": {
+      "report_nm": "일괄신고추가서류(파생결합사채-주가연계파생결합사채)",
+      "corp_cls": "Y",
+      "stock_code": "005940",
+      "corp_name": "NH투자증권",
+      "rcept_no": "20260824000008",
+      "rcept_dt": "20260824",
+      "flr_nm": "NH투자증권",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "noise"
+    }
+  },
+  {
+    "note": "drop:noise — 임원ㆍ주요주주특정증권등소유상황보고서 (U+318D 표기, 실측 1,264건으로 노이즈 중 최다).",
+    "item": {
+      "report_nm": "임원ㆍ주요주주특정증권등소유상황보고서",
+      "corp_cls": "Y",
+      "stock_code": "006340",
+      "corp_name": "대원전선",
+      "rcept_no": "20260824000009",
+      "rcept_dt": "20260824",
+      "flr_nm": "대원홀딩스",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "noise"
+    }
+  },
+  {
+    "note": "drop:noise — 주주총회소집공고. DART 실표기에는 \"정기\" 접두가 없다(Finding 2) — \"정기주주총회소집공고\"는 실측 0건.",
+    "item": {
+      "report_nm": "주주총회소집공고",
+      "corp_cls": "Y",
+      "stock_code": "404990",
+      "corp_name": "신한서부티엔디리츠",
+      "rcept_no": "20260824000257",
+      "rcept_dt": "20260824",
+      "flr_nm": "신한서부티엔디리츠",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "noise"
+    }
+  },
+  {
+    "note": "drop:noise — 자기주식취득결정(critical)의 후속 결과보고서. 이미 얼럿된 결정의 사후 서류라 노이즈로 분류된다.",
+    "item": {
+      "report_nm": "자기주식취득결과보고서",
+      "corp_cls": "K",
+      "stock_code": "051160",
+      "corp_name": "지어소프트",
+      "rcept_no": "20260824000015",
+      "rcept_dt": "20260824",
+      "flr_nm": "지어소프트",
+      "rm": ""
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "noise"
+    }
+  },
+  {
+    "note": "drop:no-keyword-match — 기타경영사항(자율공시). keywords.ts에 의도적으로 어떤 목록에도 넣지 않은 것으로 문서화된 카테고리(본문 없이는 판단 불가할 만큼 잡다함).",
+    "item": {
+      "report_nm": "기타경영사항(자율공시)              ",
+      "corp_cls": "Y",
+      "stock_code": "348950",
+      "corp_name": "제이알글로벌리츠",
+      "rcept_no": "20260824800669",
+      "rcept_dt": "20260824",
+      "flr_nm": "제이알글로벌리츠",
+      "rm": "유"
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "no-keyword-match"
+    }
+  },
+  {
+    "note": "drop:no-keyword-match — 타인에대한채무보증결정. keywords.ts에 의도적으로 제외한 것으로 문서화됨 — 대부분 자회사 대상 통상적 채무보증이고 중요성은 금액(본문)을 봐야 하는데 목록 API만으로는 볼 수 없다.",
+    "item": {
+      "report_nm": "타인에대한채무보증결정              ",
+      "corp_cls": "K",
+      "stock_code": "156100",
+      "corp_name": "엘앤케이바이오",
+      "rcept_no": "20260824900380",
+      "rcept_dt": "20260824",
+      "flr_nm": "엘앤케이바이오",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "no-keyword-match"
+    }
+  },
+  {
+    "note": "drop:no-keyword-match — 경영권변경등에관한계약체결. 화이트리스트 어디에도 없는 카테고리의 실측 사례.",
+    "item": {
+      "report_nm": "경영권변경등에관한계약체결              ",
+      "corp_cls": "K",
+      "stock_code": "351320",
+      "corp_name": "넥사다이내믹스",
+      "rcept_no": "20260824900709",
+      "rcept_dt": "20260824",
+      "flr_nm": "넥사다이내믹스",
+      "rm": "코"
+    },
+    "expected": {
+      "action": "drop",
+      "reason": "no-keyword-match"
+    }
+  }
+]
