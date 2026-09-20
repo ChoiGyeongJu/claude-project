@@ -3,7 +3,7 @@ import { canonicalizeTitle } from './canonicalize.js'
 
 /**
  * 아래 모든 리스트는 원본(사람이 읽는 한글 표기)으로 작성하고, 모듈 로드 시
- * 한 번만 canonicalizeTitle을 통과시켜 내보낸다. 매칭 루프가 2.5초마다 도는데
+ * 한 번만 canonicalizeTitle을 통과시켜 내보낸다. 매칭 루프가 사이클마다 도는데
  * 그때마다 정규화를 다시 하지 않기 위함이다 — 비교 대상(이벤트 제목)도 같은
  * 함수로 정규화된 뒤 이 리스트들과 비교되어야 한다 (rules.ts 참고).
  */

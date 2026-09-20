@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   // LLM 요약은 지금 붙여봐야 값이 없다. 공시 본문이 아직 없어 모델에 들어가는
   // 입력이 공시 제목뿐인데, 그 제목은 같은 메시지 두 줄 위에 이미 그대로 찍혀
   // 나간다 — 돈과 최대 30초의 직렬 지연을 폴링 루프 위에서 쓰면서 제목을
-  // 바꿔 쓰기만 하는 셈이다. 2.5초 주기를 지연시키는 쪽이 훨씬 비싸다.
+  // 바꿔 쓰기만 하는 셈이다. 폴링 주기를 그만큼 지연시키는 쪽이 훨씬 비싸다.
   //
   // llm.ts 와 그 테스트는 그대로 둔다 — 버린 것이 아니다. Task 18 이 문서 API 로
   // 공시 본문을 가져오면 그때 createLlmSummarizer(cfg.llm) 로 되돌린다.
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   }
   // 이미 본 공시 집합을 DB에서 심는다. 이게 없으면 첫 사이클이 최신 100건을 전부
   // recordEvent 로 보내고, 그 뒤로도 매 사이클 같은 100건이 no-op 트랜잭션으로
-  // 반복된다 — 2.5초 주기가 DB 왕복 속도에 묶인다.
+  // 반복된다 — 사이클이 DB 왕복 속도에 묶인다.
   const seen = createSeenSet(await store.recentExternalIds(source.id, SEEN_CAPACITY))
 
   // lastDigestDate 를 메모리에서만 초기화하면 KST 자정을 넘긴 재기동이 그 값을
