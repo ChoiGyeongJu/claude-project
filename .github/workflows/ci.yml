@@ -1,0 +1,61 @@
+# Green here means: types check, every test passes, and the worker's
+# production Dockerfile actually builds (linux/amd64, the only arch the
+# OCI VM needs). Nothing is pushed anywhere from this workflow.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Typecheck, test, and Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # Installs the pnpm version pinned by the root package.json's
+      # "packageManager" field (currently pnpm@10.33.0) — no version input
+      # needed here, and none should be added, so the two never drift.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      # Proves apps/worker/Dockerfile actually builds. This image is
+      # discarded (push: false) — deploy.yml does the real build-and-push
+      # on main. GHA-backed layer cache keeps repeat builds fast.
+      - name: Build worker image (no push)
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: apps/worker/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
