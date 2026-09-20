@@ -2,7 +2,7 @@
 
 - 작성일: 2026-09-19
 - 상태: 초안 (리뷰 대기)
-- 레포: https://github.com/ChoiGyeongJu/claude-project
+- 레포: https://github.com/ChoiGyeongJu/market-radar
 
 ## 1. 개요
 
@@ -89,7 +89,7 @@ Heartbeat ──▶ 외부 감시 서비스
 ### 4.4 레포 구조
 
 ```
-claude-project/
+market-radar/
 ├── apps/
 │   ├── worker/          # 1단계 · Node 데몬
 │   └── web/             # 2단계 · Next.js

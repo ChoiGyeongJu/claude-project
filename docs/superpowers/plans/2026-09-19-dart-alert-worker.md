@@ -30,7 +30,7 @@
 ## File Structure
 
 ```
-claude-project/
+market-radar/
 ├── package.json                      # pnpm workspace 루트
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
@@ -99,7 +99,7 @@ packages:
 루트 `package.json`:
 ```json
 {
-  "name": "claude-project",
+  "name": "market-radar",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
