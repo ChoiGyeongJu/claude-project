@@ -71,7 +71,10 @@ async function main(): Promise<void> {
   )
 
   await runLoop(
-    { source, store, notifier, operatorNotifier, summarizer, heartbeat, circuit, log },
+    {
+      source, store, notifier, operatorNotifier, summarizer, heartbeat, circuit, log,
+      dailyLimit: cfg.dartDailyLimit,
+    },
     {
       lastDigestDate,
       digestAttempt: null,

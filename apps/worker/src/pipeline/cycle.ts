@@ -40,6 +40,8 @@ export type CycleDeps = {
   heartbeat: Heartbeat
   circuit: Circuit
   log: CycleLogger
+  /** 계정에 발급된 일일 한도. budgetGuard 와 다이제스트 분모에 그대로 흘러간다. */
+  dailyLimit: number
 }
 
 export type CycleState = {
@@ -97,7 +99,13 @@ export async function runCycle(
     // 장애가 자정을 두 번 넘겼을 때 중간 날의 다이제스트가 영영 사라진다 —
     // 다이제스트는 운영자의 유일한 사후 감사 기록이므로 누락되면 안 된다.
     const caughtUp = await catchUpDigests(
-      { store: deps.store, notifier: deps.operatorNotifier, sourceId: deps.source.id, log: deps.log },
+      {
+        store: deps.store,
+        notifier: deps.operatorNotifier,
+        sourceId: deps.source.id,
+        log: deps.log,
+        dailyLimit: deps.dailyLimit,
+      },
       lastDigestDate,
       kstDate,
       digestAttempt,
@@ -105,7 +113,7 @@ export async function runCycle(
     lastDigestDate = caughtUp.lastDigestDate
     digestAttempt = caughtUp.digestAttempt
 
-    sleepMs = budgetGuard(used, pollIntervalMs(now))
+    sleepMs = budgetGuard(used, pollIntervalMs(now), deps.dailyLimit)
   } catch (err) {
     deps.circuit.recordFailure()
     const failures = deps.circuit.consecutiveFailures()

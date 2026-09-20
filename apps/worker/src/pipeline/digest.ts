@@ -13,6 +13,8 @@ export type DigestDeps = {
   notifier: Notifier
   sourceId: string
   log: DigestLogger
+  /** 계정에 발급된 일일 한도. 다이제스트의 API 분모로 그대로 노출된다. */
+  dailyLimit: number
 }
 
 /**
@@ -38,6 +40,7 @@ export async function runDigest(deps: DigestDeps, kstDate: string): Promise<bool
     sent: agg.sent,
     dead: agg.dead,
     apiCalls,
+    dailyLimit: deps.dailyLimit,
     missedCandidates: agg.missedCandidates,
     errorCounts: agg.errorCounts,
     missedTotal: agg.missedTotal,

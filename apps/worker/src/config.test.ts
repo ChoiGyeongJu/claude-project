@@ -35,6 +35,28 @@ describe('loadConfig', () => {
   })
 })
 
+describe('loadConfig — DART_DAILY_LIMIT (계정마다 발급된 한도가 다를 수 있다)', () => {
+  it('설정하지 않으면 OpenDART 문서상 기본값(20,000)을 쓴다', () => {
+    expect(loadConfig(valid).dartDailyLimit).toBe(20_000)
+  })
+
+  it('설정하면 그 값을 숫자로 담는다', () => {
+    expect(loadConfig({ ...valid, DART_DAILY_LIMIT: '40000' }).dartDailyLimit).toBe(40_000)
+  })
+
+  it('0은 거부한다', () => {
+    expect(() => loadConfig({ ...valid, DART_DAILY_LIMIT: '0' })).toThrow(/DART_DAILY_LIMIT/)
+  })
+
+  it('음수는 거부한다', () => {
+    expect(() => loadConfig({ ...valid, DART_DAILY_LIMIT: '-1' })).toThrow(/DART_DAILY_LIMIT/)
+  })
+
+  it('숫자가 아니면 거부한다', () => {
+    expect(() => loadConfig({ ...valid, DART_DAILY_LIMIT: 'abc' })).toThrow(/DART_DAILY_LIMIT/)
+  })
+})
+
 describe('loadConfig — 운영자 채널', () => {
   it('설정하지 않으면 null이다 — 오늘의 동작(단일 채널)이 그대로 유지된다', () => {
     expect(loadConfig(valid).operatorChatId).toBeNull()

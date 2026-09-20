@@ -56,7 +56,10 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
     const log = silentLog()
 
     const result = await runCycle(
-      { source, store: failingStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      {
+        source, store: failingStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat,
+        circuit: createCircuit(), log, dailyLimit: 20_000,
+      },
       warmState(),
       NOW,
     )
@@ -73,7 +76,10 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
     const log = silentLog()
 
     const result = await runCycle(
-      { source, store: healthyStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      {
+        source, store: healthyStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat,
+        circuit: createCircuit(), log, dailyLimit: 20_000,
+      },
       warmState(),
       NOW,
     )
@@ -89,7 +95,10 @@ describe('runCycle — heartbeat 은 finally 에 있어야 한다 (회귀 테스
     const log = silentLog()
 
     const result = await runCycle(
-      { source, store: failingStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      {
+        source, store: failingStore(), notifier, operatorNotifier: notifier, summarizer, heartbeat,
+        circuit: createCircuit(), log, dailyLimit: 20_000,
+      },
       warmState(2),
       NOW,
     )
@@ -160,7 +169,10 @@ describe('runLoop — 종료 신호가 대기 중에 오면 다음 사이클 없
     }
 
     await runLoop(
-      { source, store, notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      {
+        source, store, notifier, operatorNotifier: notifier, summarizer, heartbeat,
+        circuit: createCircuit(), log, dailyLimit: 20_000,
+      },
       warmState(),
       fakeSleeper,
       { shouldStop: () => shuttingDown },
@@ -179,7 +191,10 @@ describe('runLoop — 종료 신호가 대기 중에 오면 다음 사이클 없
     const log = silentLog()
 
     await runLoop(
-      { source, store, notifier, operatorNotifier: notifier, summarizer, heartbeat, circuit: createCircuit(), log },
+      {
+        source, store, notifier, operatorNotifier: notifier, summarizer, heartbeat,
+        circuit: createCircuit(), log, dailyLimit: 20_000,
+      },
       warmState(),
       createSleeper(),
       { shouldStop: () => true },
@@ -206,7 +221,7 @@ describe('runCycle — 운영자 알림은 구독자 채널로 가지 않는다'
     const heartbeat: Heartbeat = { ping: vi.fn(async () => true) }
     const deps = {
       source, store: failingStore(), notifier: subscriber, operatorNotifier: operator,
-      summarizer, heartbeat, circuit, log: silentLog(),
+      summarizer, heartbeat, circuit, log: silentLog(), dailyLimit: 20_000,
     }
 
     // ALERT_THRESHOLD(5) 회째에 알림이 나간다.
@@ -238,7 +253,7 @@ describe('runCycle — 운영자 알림은 구독자 채널로 가지 않는다'
     await runCycle(
       {
         source, store, notifier: subscriber, operatorNotifier: operator,
-        summarizer, heartbeat, circuit: createCircuit(), log: silentLog(),
+        summarizer, heartbeat, circuit: createCircuit(), log: silentLog(), dailyLimit: 20_000,
       },
       { ...warmState(), lastDigestDate: '2026-09-18' },
       NOW,

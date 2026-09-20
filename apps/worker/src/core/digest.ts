@@ -1,5 +1,4 @@
 import { escapeMarkdownV2 } from './format.js'
-import { DAILY_LIMIT } from './budget.js'
 import { MAX_MERGED_CHARS } from './policy.js'
 
 /**
@@ -21,6 +20,12 @@ export type DigestData = {
   sent: { critical: number; high: number; normal: number }
   dead: number
   apiCalls: number
+  /**
+   * 계정에 실제로 발급된 일일 한도(config.ts 의 DART_DAILY_LIMIT). budget.ts 의
+   * DAILY_LIMIT 상수를 쓰면 안 된다 — 계정마다 한도가 다를 수 있고, 다이제스트는
+   * 운영자가 매일 읽는 분모이므로 실제 한도와 어긋나면 안 된다.
+   */
+  dailyLimit: number
   missedCandidates: MissedCandidate[]
   errorCounts: Record<string, number>
   /** 잘리지 않은 총계. missedCandidates.length 를 실제 건수로 쓰면 심각도를 과소 표시한다. */
@@ -46,7 +51,7 @@ function render(d: DigestData, shown: number): string {
     '',
     `발송   critical ${d.sent.critical} · high ${d.sent.high} · normal ${d.sent.normal}`,
     `dead   ${d.dead}`,
-    `API    ${d.apiCalls} / ${DAILY_LIMIT}`,
+    `API    ${d.apiCalls} / ${d.dailyLimit}`,
     `에러   ${errors}`,
     '',
     d.missedTotal > list.length

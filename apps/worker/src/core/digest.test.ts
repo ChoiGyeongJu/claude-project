@@ -7,6 +7,7 @@ const data: DigestData = {
   sent: { critical: 4, high: 12, normal: 8 },
   dead: 1,
   apiCalls: 8_432,
+  dailyLimit: 20_000,
   missedCandidates: [
     { title: '주주명부폐쇄기간또는기준일설정', corpName: '샘플_전자', ticker: '005930' },
     { title: '특허권취득', corpName: '샘플바이오', ticker: '123456' },
@@ -25,6 +26,11 @@ describe('formatDigest', () => {
 
   it('API 사용량을 한도와 함께 보여준다', () => {
     expect(formatDigest(data)).toContain('8432 / 20000')
+  })
+
+  it('설정된 한도가 다르면(계정마다 발급량이 다를 수 있다) 그 값을 그대로 보여준다 — 하드코딩된 상수가 아니다', () => {
+    expect(formatDigest({ ...data, dailyLimit: 40_000 })).toContain('8432 / 40000')
+    expect(formatDigest({ ...data, dailyLimit: 40_000 })).not.toContain('/ 20000')
   })
 
   it('과필터링 후보를 나열한다 — 룰 튜닝의 유일한 단서', () => {

@@ -9,7 +9,9 @@ function deps(digestFor: EventStore['digestFor'], send: Notifier['send'], log?: 
     digestFor,
     getApiUsage: async () => 0,
   } as unknown as EventStore
-  return { store, notifier: { send }, sourceId: 'dart', log: log ?? { error: vi.fn() } }
+  return {
+    store, notifier: { send }, sourceId: 'dart', log: log ?? { error: vi.fn() }, dailyLimit: 20_000,
+  }
 }
 
 const emptyAgg = {
