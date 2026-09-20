@@ -103,7 +103,10 @@ describe('게이트 6 — 키워드 티어링', () => {
 describe('게이트 6 — 처분·소각 계열', () => {
   it.each([
     '자기주식처분결정',
-    '자기주식소각결정',
+    // '자기주식소각결정'은 filings.json 실측 0건이었다 — DART 실제 표기는
+    // '자기' 없이 '주식소각결정'(실측 44건)이다. 아래 '가운뎃점 정규화·죽은
+    // 키워드 교체 검증' 구역에 실데이터 원문 픽스처로 별도 커버한다.
+    '주식소각결정',
     '타법인주식및출자증권처분결정',
     '자기주식취득신탁계약해지결정',
   ])('%s 는 critical', (title) => {
@@ -144,5 +147,111 @@ describe('추가: 인식되지 않는 접두어 제거 후 정기보고서 판�
   it('[변경]사업보고서 는 unrecognized prefix를 제거하고 periodic-report로 drop', () => {
     expect(evaluateDart(ev('[변경]사업보고서')))
       .toEqual({ action: 'drop', reason: 'periodic-report' })
+  })
+})
+
+/**
+ * 아래 모든 제목 픽스처는 손으로 옮겨 적지 않고, 캐시된 실제 DART 응답
+ * (filings.json, 20영업일 · 15,477건)에서 그대로 가져왔다. 기존 버그가
+ * 숨어 있었던 이유가 바로 "코드와 테스트가 같은 손타이핑 오타에 합의"했기
+ * 때문이었으므로, 이 파일에서만큼은 픽스처를 다시 손으로 치지 않는다.
+ */
+describe('게이트 6 — 가운뎃점 정규화 (Finding 1)', () => {
+  it('DART가 압도적으로 많이 쓰는 U+318D(ㆍ) 표기 — 단일판매ㆍ공급계약체결(실측 410건)이 critical로 잡힌다', () => {
+    // filings.json: { report_nm: '단일판매ㆍ공급계약체결              ', ... } (에스비비테크, 389500)
+    // 가운뎃점 정규화 이전에는 코드의 키워드가 U+00B7이라 이 문자열이 no-keyword-match로 조용히 버려졌다.
+    const v = evaluateDart(ev('단일판매ㆍ공급계약체결'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:단일판매·공급계약체결' })
+  })
+
+  it('U+00B7(·)과 U+318D(ㆍ) 두 표기가 같은 키워드로 수렴한다 — 횡령·배임 사례는 실측 데이터에 둘 다 있다', () => {
+    // filings.json에 둘 다 실존: U+00B7 2건, U+318D 7건. DART는 표기를 통일해서 쓰지 않으므로
+    // 단순 문자 치환이 아니라 canonicalizeTitle 정규화가 반드시 필요하다.
+    const u00b7 = evaluateDart(ev('조회공시요구(풍문또는보도)              (현직 임원의 횡령·배임혐의설)'))
+    const u318d = evaluateDart(ev('횡령ㆍ배임혐의발생'))
+    expect(u00b7).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:횡령·배임' })
+    expect(u318d).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:횡령·배임' })
+  })
+
+  it('노이즈 패턴도 같은 정규화를 거친다 — 임원ㆍ주요주주 소유상황보고서(U+318D, 실측 1,264건)', () => {
+    // filings.json: '임원ㆍ주요주주특정증권등소유상황보고서' — 코드의 NOISE_PATTERNS는 U+00B7로 적혀 있었다.
+    expect(evaluateDart(ev('임원ㆍ주요주주특정증권등소유상황보고서')))
+      .toEqual({ action: 'drop', reason: 'noise' })
+  })
+})
+
+describe('게이트 6 — 죽은 키워드 교체 (Finding 2)', () => {
+  it("'자기주식소각결정'(실측 0건) 대신 DART 실제 표기 '주식소각결정'(실측 44건)을 쓴다", () => {
+    // filings.json: '주식소각결정              ' — '자기' 접두 없는 표기만 존재한다.
+    expect(evaluateDart(ev('주식소각결정')))
+      .toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:주식소각결정' })
+  })
+
+  it("노이즈 '정기주주총회소집공고'(실측 0건) 대신 DART 실제 표기 '주주총회소집공고'(실측 146건)를 쓴다", () => {
+    // filings.json: '주주총회소집공고' — '정기' 접두 없는 표기만 존재한다.
+    expect(evaluateDart(ev('주주총회소집공고')))
+      .toEqual({ action: 'drop', reason: 'noise' })
+  })
+})
+
+describe('게이트 6 — 신규 키워드 (Finding 3)', () => {
+  it('소송등의제기ㆍ신청(실측 51건, 원문에 접두 없는 것만 통과)은 high', () => {
+    // filings.json: '소송등의제기ㆍ신청(경영권분쟁소송)              '
+    const v = evaluateDart(ev('소송등의제기ㆍ신청(경영권분쟁소송)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'high', rule: 'keyword:소송등의제기' })
+  })
+
+  it('소송등의판결ㆍ결정(실측 42건)은 high', () => {
+    // filings.json: '소송등의판결ㆍ결정              '
+    const v = evaluateDart(ev('소송등의판결ㆍ결정'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'high', rule: 'keyword:소송등의판결' })
+  })
+
+  it('풍문또는보도에대한해명(실측 34건)은 high', () => {
+    // filings.json: '풍문또는보도에대한해명              '
+    const v = evaluateDart(ev('풍문또는보도에대한해명'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'high', rule: 'keyword:풍문또는보도에대한해명' })
+  })
+
+  it('전환가액의조정(실측 58건)은 새로 생긴 normal 티어로 들어간다', () => {
+    // filings.json: '전환가액의조정              '
+    const v = evaluateDart(ev('전환가액의조정'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'normal', rule: 'keyword:전환가액의조정' })
+  })
+
+  it("타인에대한채무보증결정(실측 132건)은 의도적으로 어떤 목록에도 넣지 않는다 — 본문 없이는 중요도 판단 불가", () => {
+    // 목록만으로는 통상적 자회사 채무보증과 시장을 흔들 대규모 보증을 구분할 수 없다.
+    expect(evaluateDart(ev('타인에대한채무보증결정')))
+      .toEqual({ action: 'drop', reason: 'no-keyword-match' })
+  })
+})
+
+describe('게이트 6 — 거래정지: 기계적 사유 vs 실제 이상 신호 (Finding 4)', () => {
+  it.each([
+    ['주권매매거래정지해제              (액면병합 주권 변경상장)', '액면병합 변경상장 (실측 36건)'],
+    ['주권매매거래정지              (주식의 병합, 분할 등 전자등록 변경, 말소)', '주식의 병합·분할 등 전자등록 변경 (실측 21건)'],
+  ])('%s 는 사무적 매매정지이므로 normal로 낮춘다 — %s', (title) => {
+    const v = evaluateDart(ev(title))
+    expect(v).toMatchObject({ action: 'pass', tier: 'normal', rule: 'keyword:거래정지' })
+  })
+
+  it.each([
+    // 두 제목 모두 괄호 안에 '상장폐지'라는 문자열을 담고 있어서, CRITICAL_KEYWORDS
+    // 배열에서 '거래정지'보다 먼저 오는 '상장폐지' 키워드에 먼저 걸린다 — 어느 쪽이든
+    // tier는 critical로 유지되고, 마커 유무를 따지는 거래정지 특례는 아예 타지 않는다.
+    // (실제 evaluateDart 실행 결과로 검증: rule은 'keyword:상장폐지'.)
+    ['주권매매거래정지              (상장폐지 사유발생)', '상장폐지 사유발생 (실측 7건)', 'keyword:상장폐지'],
+    // 과제에서 특히 강조한 사례: 정리매매 개시에 따른 거래정지는 진짜 이벤트다.
+    ['주권매매거래정지해제              (상장폐지에 따른 정리매매 개시)', '정리매매 개시 (실측 6건) — 이 사례가 핵심', 'keyword:상장폐지'],
+  ])('%s 는 실제 이상 신호이므로 critical을 유지한다 — %s', (title, _label, expectedRule) => {
+    const v = evaluateDart(ev(title))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: expectedRule })
+  })
+
+  it("거래정지' 자체가 매칭 키워드로 남는 실제 이상 신호도 critical을 유지한다 — 상장폐지 문구가 없는 '중요내용공시' 사례 (실측 6건)", () => {
+    // filings.json: '매매거래정지및정지해제(중요내용공시)              ' — 마커(액면병합/주식의
+    // 병합/분할/전자등록/변경상장) 중 어느 것도 없으므로 거래정지 특례가 critical을 유지시킨다.
+    const v = evaluateDart(ev('매매거래정지및정지해제(중요내용공시)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:거래정지' })
   })
 })
