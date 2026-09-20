@@ -34,7 +34,7 @@ describe('outbox 테이블', () => {
 
   it(
     '(status, next_attempt_at) 인덱스를 가진다 — claimPending 이 매 사이클 돌기 때문에 ' +
-      '인덱스가 없으면 sent/dead 가 쌓일수록 순차 스캔 비용이 2.5초 주기에 그대로 얹힌다',
+      '인덱스가 없으면 sent/dead 가 쌓일수록 순차 스캔 비용이 매 폴링 사이클에 그대로 얹힌다',
     () => {
       const cfg = getTableConfig(outbox)
       const cols = cfg.indexes.map((i) => i.config.columns.map((c) => 'name' in c ? c.name : ''))

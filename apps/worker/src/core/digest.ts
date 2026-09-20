@@ -4,8 +4,8 @@ import { MAX_MERGED_CHARS } from './policy.js'
 /**
  * 다이제스트 따라잡기(catchUpDigests)가 같은 날짜를 재시도할 수 있는 최대 횟수.
  * outbox 의 MAX_ATTEMPTS(core/retry.ts)와 값을 맞춘다 — 잘못된 운영자 chat id 나
- * 길이 상한을 넘는 본문처럼 영원히 보낼 수 없는 다이제스트가 매 사이클(성수기
- * ~2.5초) 무한 재시도되며 운영자 채널의 레이트리밋 예산을 태우는 것을 막는다.
+ * 길이 상한을 넘는 본문처럼 영원히 보낼 수 없는 다이제스트가 매 사이클(장중
+ * 10초) 무한 재시도되며 운영자 채널의 레이트리밋 예산을 태우는 것을 막는다.
  */
 export const MAX_DIGEST_ATTEMPTS = 5
 

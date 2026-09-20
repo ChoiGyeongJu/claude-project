@@ -38,7 +38,7 @@ export const outbox = pgTable('outbox', {
 }, (t) => ({
   // claimPending 은 매 사이클 실행되고 where(status='pending' AND next_attempt_at <= now)
   // 로 좁힌다. 인덱스가 없으면 outbox 전체를 순차 스캔하며, sent/dead 가 쌓일수록
-  // 그 비용이 단조 증가한다 — 2.5초 주기에 그대로 얹힌다.
+  // 그 비용이 단조 증가한다 — 매 폴링 사이클에 그대로 얹힌다.
   pendingIdx: index('outbox_status_next_attempt_idx').on(t.status, t.nextAttemptAt),
 }))
 
