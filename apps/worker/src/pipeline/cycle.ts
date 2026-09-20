@@ -11,6 +11,7 @@ import { runIngest } from './ingest.js'
 import type { IngestState } from './ingest.js'
 import { runDispatch } from './dispatch.js'
 import { catchUpDigests } from './digest.js'
+import type { DigestAttempt } from './digest.js'
 
 /**
  * main.ts 는 `main().catch(...)` 를 모듈 로드 시점에 바로 실행하므로 테스트에서
@@ -43,6 +44,8 @@ export type CycleDeps = {
 
 export type CycleState = {
   lastDigestDate: string
+  /** lastDigestDate 에 막혀 있는 날짜의 연속 실패 횟수. digest.ts 의 catchUpDigests 참고. */
+  digestAttempt: DigestAttempt | null
   heartbeatFailures: number
 } & IngestState
 
@@ -53,6 +56,7 @@ export async function runCycle(
 ): Promise<CycleResult> {
   const kstDate = kstDateString(now)
   let lastDigestDate = state.lastDigestDate
+  let digestAttempt = state.digestAttempt
   let heartbeatFailures = state.heartbeatFailures
   // 실패 시에는 진입 상태 그대로 돌려준다 — 특히 coldStart 가 true 로 남아야
   // 기동 직후 DART 가 불통이었던 경우에도 첫 성공 사이클이 억제 사이클이 된다.
@@ -92,11 +96,14 @@ export async function runCycle(
     // 자정이 지나면 밀린 날짜를 하루씩 모두 보낸다. `= kstDate` 로 건너뛰면
     // 장애가 자정을 두 번 넘겼을 때 중간 날의 다이제스트가 영영 사라진다 —
     // 다이제스트는 운영자의 유일한 사후 감사 기록이므로 누락되면 안 된다.
-    lastDigestDate = await catchUpDigests(
-      { store: deps.store, notifier: deps.operatorNotifier, sourceId: deps.source.id },
+    const caughtUp = await catchUpDigests(
+      { store: deps.store, notifier: deps.operatorNotifier, sourceId: deps.source.id, log: deps.log },
       lastDigestDate,
       kstDate,
+      digestAttempt,
     )
+    lastDigestDate = caughtUp.lastDigestDate
+    digestAttempt = caughtUp.digestAttempt
 
     sleepMs = budgetGuard(used, pollIntervalMs(now))
   } catch (err) {
@@ -128,6 +135,7 @@ export async function runCycle(
   return {
     sleepMs,
     lastDigestDate,
+    digestAttempt,
     heartbeatFailures,
     seen: ingestState.seen,
     coldStart: ingestState.coldStart,

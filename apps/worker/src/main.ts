@@ -74,6 +74,7 @@ async function main(): Promise<void> {
     { source, store, notifier, operatorNotifier, summarizer, heartbeat, circuit, log },
     {
       lastDigestDate,
+      digestAttempt: null,
       heartbeatFailures: 0,
       seen,
       // 첫 사이클은 기록만 하고 한 건도 발송하지 않는다. 워커는 자신이 얼마나

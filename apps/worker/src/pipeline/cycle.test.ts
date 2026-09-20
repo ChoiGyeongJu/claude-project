@@ -20,6 +20,7 @@ function silentLog(): CycleLogger {
 function warmState(heartbeatFailures = 0): CycleState {
   return {
     lastDigestDate: TODAY,
+    digestAttempt: null,
     heartbeatFailures,
     seen: createSeenSet(['20260919000100']),
     coldStart: false,
