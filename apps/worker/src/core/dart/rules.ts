@@ -69,15 +69,22 @@ export function evaluateDart(event: NormalizedEvent): Verdict {
     return { action: 'drop', reason: 'periodic-report' }
   }
 
-  // 게이트 5 — 명시적 노이즈
-  if (NOISE_PATTERNS.some((p) => body.includes(p))) {
-    return { action: 'drop', reason: 'noise' }
-  }
-
-  // 게이트 6 — 키워드 티어링
+  // 게이트 6 — 키워드 티어링 (게이트 5 노이즈보다 먼저 실행: 게이트 4가 게이트 3보다
+  // 먼저 실행되는 것과 같은 이유다. 노이즈 패턴은 부분일치(includes)라서 화이트리스트
+  // 키워드를 우연히 삼킬 수 있다 — 실측으로 두 건을 발견했다: 최대주주등소유주식변동
+  // 신고서(최대주주변경시) 3건, 회사합병결정이 섞인 임시주주총회소집결의 철회 2건.
+  // 둘 다 노이즈 패턴과 겹치지만 진짜 이벤트이므로 키워드가 이겨야 한다. 이 순서가
+  // 노이즈만 있고 키워드가 없는 기존 동작을 바꾸지는 않는다 — 튜닝 전 노이즈 4종·
+  // 키워드 전체로 실측 데이터셋 15,477건을 순서만 바꿔 재실행해도 pass/drop 분포가
+  // (948건, 노이즈 1,683건 포함) 정확히 그대로였다.
   const matched = matchKeyword(body)
   if (matched) {
     return { action: 'pass', tier: matched.tier, rule: `keyword:${matched.keyword}` }
+  }
+
+  // 게이트 5 — 명시적 노이즈
+  if (NOISE_PATTERNS.some((p) => body.includes(p))) {
+    return { action: 'drop', reason: 'noise' }
   }
 
   // 게이트 7 — 화이트리스트 미매칭

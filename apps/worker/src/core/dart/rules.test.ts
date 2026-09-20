@@ -138,7 +138,10 @@ describe('게이트 6 — 처분·소각 계열', () => {
 
 describe('게이트 7 — 화이트리스트 미매칭', () => {
   it('목록에 없는 공시는 drop하고 사유를 남긴다', () => {
-    expect(evaluateDart(ev('주주명부폐쇄기간또는기준일설정')))
+    // '주주명부폐쇄기간또는기준일설정'은 이번 튜닝 패스에서 NOISE_PATTERNS로 옮겨졌다
+    // (Finding 5 참고) — 이 게이트를 대표하는 픽스처를 감사보고서제출(실측 12건, 여전히
+    // 어떤 목록에도 없음)로 교체한다.
+    expect(evaluateDart(ev('감사보고서제출')))
       .toEqual({ action: 'drop', reason: 'no-keyword-match' })
   })
 })
@@ -252,6 +255,133 @@ describe('게이트 6 — 거래정지: 기계적 사유 vs 실제 이상 신호
     // filings.json: '매매거래정지및정지해제(중요내용공시)              ' — 마커(액면병합/주식의
     // 병합/분할/전자등록/변경상장) 중 어느 것도 없으므로 거래정지 특례가 critical을 유지시킨다.
     const v = evaluateDart(ev('매매거래정지및정지해제(중요내용공시)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:거래정지' })
+  })
+})
+
+/**
+ * 두 번째 튜닝 패스. no-keyword-match 4,136건 중 약 3,200건이 정형 서류였고, 그
+ * 밑에 진짜 신규 시그널(기타시장안내의 실질심사, 조회공시요구 절반, CB 이동 등)이
+ * 묻혀 있었다. 아래 픽스처도 filings.json(20영업일 · 15,477건)에서 그대로 가져왔다.
+ */
+describe('게이트 5 — 노이즈 확장: 다이제스트 신호 정리 (Finding 5)', () => {
+  it.each([
+    ['주식등의대량보유상황보고서(일반)', '5% 룰 — 의도적으로 범위 밖 (실측 882건)'],
+    ['대규모기업집단현황공시[분기별공시(개별회사용)]', '분기별 대규모기업집단 현황공시 (실측 384건)'],
+    ['투자설명서(일괄신고)', '등록 서류 (실측 333건)'],
+    ['일괄신고추가서류', '등록 서류 (실측 316건)'],
+    ['증권발행실적보고서', '발행결정 후속 서류 (실측 312건)'],
+    ['증권발행결과(자율공시)', '발행결정 후속 서류 (실측 76건)'],
+    ['최대주주등소유주식변동신고서', '실측 236건'],
+    ['주주명부폐쇄기간또는기준일설정', '실측 121건'],
+    ['주주총회소집결의(임시주주총회)', '실측 112건'],
+    ['임시주주총회결과', '실측 97건'],
+    ['의결권대리행사권유참고서류', '실측 65건'],
+    ['임원ㆍ주요주주특정증권등거래계획보고서', 'U+318D 표기 (실측 59건)'],
+    ['독립이사의선임ㆍ해임또는중도퇴임에관한신고', '실측 49건'],
+    ['신탁계약에의한취득상황보고서', '실측 37건'],
+    ['자기주식취득결과보고서', '취득결정 후속 서류 (실측 31건)'],
+    ['신탁계약해지결과보고서', '해지결정 후속 서류 (실측 30건)'],
+    ['자기주식처분결과보고서', '처분결정 후속 서류 (실측 15건)'],
+    ['소액공모공시서류(지분증권)', '실측 20건'],
+    ['소액공모실적보고서', '실측 15건'],
+  ])('%s 는 drop(noise) — %s', (title) => {
+    expect(evaluateDart(ev(title))).toEqual({ action: 'drop', reason: 'noise' })
+  })
+
+  /**
+   * 노이즈는 부분일치라서 화이트리스트 키워드를 우연히 삼킬 수 있다. rules.ts에서
+   * 키워드 티어링(게이트 6)을 노이즈(게이트 5)보다 먼저 실행하도록 순서를 바꿔서
+   * 막았다 — 아래 두 사례를 실측 데이터에서 직접 찾아 검증했다.
+   */
+  it('노이즈보다 화이트리스트 키워드가 우선한다 — 최대주주등소유주식변동신고서(최대주주변경시) (실측 3건)는 critical로 살아남는다', () => {
+    const v = evaluateDart(ev('최대주주등소유주식변동신고서(최대주주변경시)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:최대주주변경' })
+  })
+
+  it('노이즈보다 화이트리스트 키워드가 우선한다 — 회사합병결정이 섞인 임시주주총회소집결의 철회 (실측 2건)는 critical로 살아남는다', () => {
+    const v = evaluateDart(ev('기타주요경영사항(자회사의 주요경영사항)              (회사합병 결정 및 임시주주총회 소집결의 철회)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:회사합병결정' })
+  })
+})
+
+describe('게이트 6 — 신규 키워드 (Finding 6)', () => {
+  it('실질심사(실측 21건, no-keyword-match)는 critical — 상장적격성 실질심사는 상장폐지로 이어질 수 있는 심사 절차다', () => {
+    // filings.json: '기타시장안내(실질심사대상여부결정을위한조사기간연장안내)              '
+    const v = evaluateDart(ev('기타시장안내(실질심사대상여부결정을위한조사기간연장안내)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:실질심사' })
+  })
+
+  it("거래정지와 실질심사가 함께 나오는 제목은 거래정지 특례 라벨을 유지한다 — CRITICAL_KEYWORDS 배열에서 '실질심사'를 '거래정지' 뒤에 둔 이유", () => {
+    // filings.json: '주권매매거래정지기간변경              (상장적격성실질심사대상(사유발생))'
+    const v = evaluateDart(ev('주권매매거래정지기간변경              (상장적격성실질심사대상(사유발생))'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:거래정지' })
+  })
+
+  it.each([
+    ['조회공시요구(현저한시황변동)에대한답변(중요정보없음)', '실측 4건'],
+    ['조회공시요구(현저한시황변동)', '요구 그 자체 — 실측 3건'],
+    ['조회공시요구(풍문또는보도)에대한답변(미확정)', '기존 좁은 키워드가 커버하던 사례 — 실측 10건'],
+  ])('%s 는 넓어진 조회공시요구 키워드로 high 통과한다 — %s', (title) => {
+    const v = evaluateDart(ev(title))
+    expect(v).toMatchObject({ action: 'pass', tier: 'high', rule: 'keyword:조회공시요구' })
+  })
+
+  it('횡령·배임처럼 더 구체적인 critical 키워드가 섞인 조회공시요구는 여전히 critical이 이긴다', () => {
+    // filings.json: '조회공시요구(풍문또는보도)(현직임원의횡령·배임혐의설)              '
+    const v = evaluateDart(ev('조회공시요구(풍문또는보도)(현직임원의횡령·배임혐의설)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:횡령·배임' })
+  })
+
+  it.each([
+    ['주요사항보고서(자기전환사채만기전취득결정)', '자사 CB 만기전 취득 — 실측 34건'],
+    ['전환사채(해외전환사채포함)발행후만기전사채취득', '해외전환사채 포함 만기전 취득 — 실측 31건'],
+    ['주요사항보고서(자기전환사채매도결정)', 'CB 재매각 — 실측 10건'],
+  ])('%s 는 normal — %s', (title) => {
+    const v = evaluateDart(ev(title))
+    expect(v).toMatchObject({ action: 'pass', tier: 'normal' })
+  })
+
+  it('CB 이동 키워드가 주요사항보고서(전환사채권발행결정)를 삼키지 않는다 — 여전히 critical', () => {
+    const v = evaluateDart(ev('주요사항보고서(전환사채권발행결정)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:전환사채권발행결정' })
+  })
+
+  it.each([
+    ['대표이사변경', '실측 31건'],
+    ['금전대여결정', '실측 25건'],
+    ['투자판단관련주요경영사항', '회사 스스로 중요하다고 표시한 공시 — 실측 87건'],
+  ])('%s 는 normal — %s', (title) => {
+    const v = evaluateDart(ev(title))
+    expect(v).toMatchObject({ action: 'pass', tier: 'normal', rule: `keyword:${title}` })
+  })
+
+  it('회사분할결정(실측 3건)은 회사합병결정과 대칭인 취득·처분 비대칭 패턴 — critical', () => {
+    // filings.json: '주요사항보고서(회사분할결정)'
+    const v = evaluateDart(ev('주요사항보고서(회사분할결정)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:회사분할결정' })
+  })
+
+  it('기타경영사항(자율공시)(실측 26건)은 의도적으로 어떤 목록에도 넣지 않는다 — 본문 없이는 잡다해서 판단 불가', () => {
+    expect(evaluateDart(ev('기타경영사항(자율공시)')))
+      .toEqual({ action: 'drop', reason: 'no-keyword-match' })
+  })
+})
+
+/**
+ * '분할' 단독 마커는 지나치게 넓은 부분일치였다. 실데이터에 실제로 나타나는 온전한
+ * 표현 '주식의 병합, 분할'로 좁혔다 — 기계적 판정 건수는 좁히기 전후로 동일했다
+ * (실측 전수 검증: 63건, 변화 없음). 아래는 그 경계를 다시 확인하는 회귀 테스트다.
+ */
+describe('게이트 6 — 거래정지 마커 좁히기: 분할 → 주식의 병합, 분할 (Finding 7)', () => {
+  it('기계적 사유는 여전히 normal로 낮아진다 — 주식의 병합, 분할 등 전자등록 변경 (실측 21건)', () => {
+    const v = evaluateDart(ev('주권매매거래정지              (주식의 병합, 분할 등 전자등록 변경, 말소)'))
+    expect(v).toMatchObject({ action: 'pass', tier: 'normal', rule: 'keyword:거래정지' })
+  })
+
+  it('실제 이상 신호는 마커 좁히기와 무관하게 critical을 유지한다 — SPAC 합병 예비심사청구대상으로 인한 거래정지 (실측 2건)', () => {
+    // filings.json: '주권매매거래정지              (SPAC 합병(예비심사청구대상))              '
+    const v = evaluateDart(ev('주권매매거래정지              (SPAC 합병(예비심사청구대상))'))
     expect(v).toMatchObject({ action: 'pass', tier: 'critical', rule: 'keyword:거래정지' })
   })
 })

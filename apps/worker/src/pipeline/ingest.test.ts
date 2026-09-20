@@ -60,8 +60,12 @@ describe('runIngest', () => {
 
   it('drop 이벤트도 사유와 함께 기록하되 enqueue하지 않는다', async () => {
     const { store, recordEvent } = fakeStore()
+    // '주주명부폐쇄기간또는기준일설정'은 DART 필터 튜닝 2차 패스에서 NOISE_PATTERNS로
+    // 옮겨졌다 (apps/worker/src/core/dart/rules.test.ts의 Finding 5 참고) — 이 테스트가
+    // 실제로 검증하려는 것은 no-keyword-match 사유 자체이므로, 여전히 어떤 목록에도
+    // 없는 감사보고서제출(실측 12건)로 픽스처를 교체한다.
     const { stats } = await runIngest(
-      { source: fakeSource([mkEvent({ title: '주주명부폐쇄기간또는기준일설정' })]), store },
+      { source: fakeSource([mkEvent({ title: '감사보고서제출' })]), store },
       warm([ID.older]),
       NOW,
     )
